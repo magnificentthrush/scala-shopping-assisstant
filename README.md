@@ -43,6 +43,7 @@ scala-shopping-assistant/
 │   ├── raw/                          # original Kaggle CSV (gitignored)
 │   └── scripts/                      # seed script → Postgres
 ├── docs/
+│   ├── database-schema.md            # PostgreSQL schema and CSV mapping
 │   └── project-plan.md               # full sprint plan & decisions
 └── README.md
 ```
@@ -53,7 +54,7 @@ scala-shopping-assistant/
 | `backend/`  | Backend interns + lead | HTTP routes, services, DB access, LLM client   |
 | `frontend/` | Frontend intern        | Chat widget, product cards, API client         |
 | `data/`     | Catalog owner          | Product CSV + seed scripts                     |
-| `docs/`     | Whole team             | Architecture notes, API contract, project plan |
+| `docs/`     | Whole team             | Database schema, architecture notes, API contract, project plan |
 
 
 ---
@@ -162,4 +163,7 @@ scala-shopping-assistant/
 | Catalog      | Kaggle e-commerce dataset → seeded into Postgres |
 
 
-See `[docs/project-plan.md](docs/project-plan.md)` for the full plan, API ideas, timeline, and team roles.
+See:
+
+- [`docs/database-schema.md`](docs/database-schema.md) for the PostgreSQL table, indexes, and CSV column mapping.
+- [`docs/project-plan.md`](docs/project-plan.md) for the full plan, API ideas, timeline, and team roles.

@@ -507,6 +507,8 @@ Framed that way, Scala is a reasonable choice **for this company's goals**, even
 
 ### 10.2 Target Postgres schema
 
+The canonical schema reference, including column descriptions, indexes, and source-data mapping, is in [`database-schema.md`](database-schema.md). Keep that document and database migrations synchronized when the schema changes.
+
 ```sql
 CREATE TABLE products (
   id                      TEXT PRIMARY KEY,          -- from uniq_id
