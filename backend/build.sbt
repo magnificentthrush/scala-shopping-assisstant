@@ -1,0 +1,11 @@
+ThisBuild / scalaVersion := "2.13.12"
+
+lazy val root = (project in file("."))
+  .settings(
+    name := "assistant",
+    libraryDependencies ++= Seq(
+      "com.lihaoyi" %% "cask" % "0.9.2",
+      "com.lihaoyi" %% "upickle" % "3.3.1",
+      "org.postgresql" % "postgresql" % "42.7.3"
+    )
+  )

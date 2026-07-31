@@ -1,0 +1,5 @@
+# Local-only for now — not pushing migrations/scripts/seed to main yet
+migrations/
+scripts/
+seed/
+*.sql
