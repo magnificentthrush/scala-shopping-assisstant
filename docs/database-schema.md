@@ -1,4 +1,4 @@
-# Database Schema
+# Database Schema — ShopPilot
 
 The application uses **hosted Supabase Postgres** — a single shared database across all environments (every developer, CI, and the deployed demo point at the same project). There is no local/Dockerized Postgres. See [`ARCHITECTURE.md`](ARCHITECTURE.md) §2 for why, and this file's [Migrations](#migrations) section for how schema changes are made safely against a shared database.
 

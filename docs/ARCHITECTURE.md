@@ -1,6 +1,6 @@
 # Architecture
 
-This is the design of the Scala AI Shopping Assistant: a React frontend, a Scala/Cask backend, Gemma 4 for language understanding, and Supabase Postgres for all persistent data. It covers infrastructure, authentication, multi-turn conversations, product retrieval, the prompt-security pipeline, and logging.
+This is the design of **ShopPilot**, an AI shopping assistant: a React frontend, a Scala/Cask backend, Gemma 4 for language understanding, and Supabase Postgres for all persistent data. It covers infrastructure, authentication, multi-turn conversations, product retrieval, the prompt-security pipeline, and logging.
 
 ## 1. Tiers and infrastructure
 

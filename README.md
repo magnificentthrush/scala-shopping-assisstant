@@ -1,6 +1,6 @@
-# Scala AI Shopping Assistant
+# ShopPilot
 
-An AI-powered shopping assistant. Users create an account, chat in plain language (e.g. *"waterproof hiking shoes under $120"*), and the app finds matching products and explains why they fit — remembering the conversation across follow-up messages and across sessions.
+**ShopPilot** is an AI shopping assistant. Users create an account, chat in plain language (e.g. *"waterproof hiking shoes under $120"*), and the app finds matching products and explains why they fit — remembering the conversation across follow-up messages and across sessions.
 
 **Stack:** React (frontend) · Scala / Cask (backend) · Gemma 4 via Google AI Studio · Supabase Postgres (hosted) · JWT auth
 
@@ -157,6 +157,7 @@ scala-shopping-assistant/
 │       └── apply_migrations.py           # migration runner (checks schema_migrations)
 ├── docs/
 │   ├── ARCHITECTURE.md                   # full architecture: infra, auth, security pipeline, logging
+│   ├── API_CONTRACT.md                   # frontend-facing request/response shapes (mockable)
 │   ├── database-schema.md                # every table, columns, migrations, seeding
 │   └── project-plan.md                   # sprint plan & decisions
 └── README.md
@@ -167,7 +168,7 @@ scala-shopping-assistant/
 | `backend/` | Backend interns + lead | Routes, auth, conversation/LLM services, `ProductProvider`, logging |
 | `frontend/` | Frontend intern | Chat widget, product cards, API client |
 | `data/` | Catalog owner | Migrations, seed script, raw CSV |
-| `docs/` | Whole team | Architecture, database schema, project plan |
+| `docs/` | Whole team | Architecture, API contract, database schema, project plan |
 
 ---
 
@@ -253,5 +254,6 @@ Never hardcode secrets. `.env.example` documents the shape; `.env` is gitignored
 ## See also
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full architecture, infra, auth, security pipeline, logging.
+- [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — frontend API request/response shapes (build/mock against these).
 - [`docs/database-schema.md`](docs/database-schema.md) — every table, migrations, seeding.
 - [`docs/project-plan.md`](docs/project-plan.md) — sprint plan, timeline, team roles.

@@ -1,5 +1,6 @@
-# Scala AI Shopping Assistant — Project Plan
+# ShopPilot — Project Plan
 
+**Product:** ShopPilot (AI shopping assistant)
 **Team:** 4 interns (1 lead + 3 interns)
 **Stack:** React (frontend) + Scala (backend) + Gemma 4 (Google AI Studio) + Supabase Postgres (hosted, shared)
 **Duration:** 10 working days
@@ -630,4 +631,4 @@ User message
 
 ## Appendix: What "done" looks like on Day 10
 
-A working demo where a user registers/logs in, types something like *"I need waterproof shoes for hiking under $120"*, the message passes the regex/Gemma validation pipeline, Gemma extracts filters, Supabase retrieves candidates via `ProductProvider`, the reranker returns top 5, and the assistant replies with a short explanation plus product cards — with the conversation persisted so the user can leave and resume it later. Runs from `docker compose up` locally (frontend + backend, against the team's shared Supabase project) and also live at a deployed demo URL, with a backup recording in case the live version hiccups during the actual presentation.
+A working **ShopPilot** demo where a user registers/logs in, types something like *"I need waterproof shoes for hiking under $120"*, the message passes the regex/Gemma validation pipeline, Gemma extracts filters, Supabase retrieves candidates via `ProductProvider`, the reranker returns top 5, and the assistant replies with a short explanation plus product cards — with the conversation persisted so the user can leave and resume it later. Runs from `docker compose up` locally (frontend + backend, against the team's shared Supabase project) and also live at a deployed demo URL, with a backup recording in case the live version hiccups during the actual presentation.

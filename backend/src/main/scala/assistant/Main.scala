@@ -7,7 +7,7 @@ object Main extends cask.MainRoutes {
   @cask.get("/")
   def index(): ujson.Value =
     ujson.Obj(
-      "message" -> "Scala AI Shopping Assistant backend is running"
+      "message" -> "ShopPilot backend is running"
     )
 
   @cask.get("/health")
