@@ -13,6 +13,7 @@ Writes: data/clean_products.csv
 """
 
 import ast
+import json
 import re
 import pandas as pd
 
@@ -78,6 +79,55 @@ def standardize_category(cat):
     return cleaned.title() if cleaned else None
 
 
+def blank_to_none(value):
+    """Empty string / whitespace-only / NaN -> None, so it lands as a real
+    NULL in Postgres instead of an empty string. Used for description,
+    image_url, and product_url."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
+def clean_rating(value):
+    """rating is TEXT in the schema, but the source uses '' and the literal
+    sentinel string 'No rating available' to mean "no rating" -- both need
+    to become a real NULL, not a string that reads as if it were data."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    text = str(value).strip()
+    if text == "" or text.lower() == "no rating available":
+        return None
+    return text
+
+
+def normalize_specifications(value):
+    """product_specifications arrives as Ruby hash-rocket syntax, e.g.
+    {"product_specification"=>[{"key"=>"Fabric", "value"=>"Cotton"}]}
+    which is NOT valid JSON ('=>' isn't a JSON token) and will fail (or
+    silently store garbage) on insert into a JSON/JSONB column.
+
+    Converts '=>' to ':' and re-serializes through json.loads/json.dumps
+    so the output is guaranteed-valid, compact JSON. Returns None for
+    blank/unparseable values rather than passing through raw garbage."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+
+    # Ruby hash-rocket -> JSON colon. Values in this dataset are always
+    # quoted strings/lists/dicts, so a straight token replace is safe here.
+    json_text = text.replace("=>", ":")
+
+    try:
+        parsed = json.loads(json_text)
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+    return json.dumps(parsed)
+
+
 def main():
     df = pd.read_csv(RAW_PATH)
     start_count = len(df)
@@ -140,6 +190,30 @@ def main():
     ]
     df = df[final_columns]
 
+    # --- 9. Normalize sentinel/missing values to real NULLs -----------------
+    # Prevents mixed representations of "no data" (empty string, literal
+    # sentinel text, raw Ruby hash syntax) from landing in the DB as-is.
+    df["rating"] = df["rating"].apply(clean_rating)
+    df["description"] = df["description"].apply(blank_to_none)
+    df["image_url"] = df["image_url"].apply(blank_to_none)
+    df["product_url"] = df["product_url"].apply(blank_to_none)
+    df["brand"] = df["brand"].apply(blank_to_none)
+
+    before = len(df)
+    df["product_specifications"] = df["product_specifications"].apply(normalize_specifications)
+    notes["specs_unparseable_set_null"] = int(df["product_specifications"].isna().sum())
+
+    # --- 10. Final safety-net dedup on id ------------------------------------
+    # We already dedup on the source `pid`, but `id` (source `uniq_id`) is
+    # the actual primary key this maps to -- enforce uniqueness on it
+    # explicitly too, rather than assuming pid-dedup was sufficient.
+    # NOTE: this should ALSO be enforced with a UNIQUE/PRIMARY KEY constraint
+    # on products.id at the DB level -- a script-level dedup alone is not a
+    # substitute for a DB constraint (first-write-wins here is silent).
+    before = len(df)
+    df = df.drop_duplicates(subset=["id"], keep="first")
+    notes["duplicate_id_removed"] = before - len(df)
+
     df.to_csv(OUT_PATH, index=False)
 
     notes["final_count"] = len(df)
@@ -175,12 +249,31 @@ def write_notes(n):
    - Missing/malformed `category`: {n['removed_missing_category']}
    - **Total removed for missing critical fields:** {n['total_missing_critical_removed']}
 7. **Removed rows with invalid prices:** {n['removed_invalid_price']}
-   (non-numeric, zero/negative, or discounted price higher than retail price)
+   (non-numeric, zero/negative, or discounted price higher than retail price;
+   these rows are excluded entirely, not inserted with a 0 or blank price)
 8. **Dropped unused source columns** (per `docs/project-plan.md` §10.1):
    `crawl_timestamp`, `pid`, `is_FK_Advantage_product`, `overall_rating`.
 9. **Renamed columns** to match the `products` table schema:
    `uniq_id`→`id`, `product_name`→`name`, `discounted_price`→`price`,
    `retail_price`→`original_price`, `product_rating`→`rating`.
+10. **Normalized sentinel/missing values to real NULLs**, instead of passing
+    through mixed representations of "no data":
+    - `rating`: empty string and the literal `"No rating available"` → NULL.
+    - `description`, `image_url`, `product_url`, `brand`: empty/whitespace
+      strings → NULL.
+11. **Converted `product_specifications` from Ruby hash-rocket syntax to
+    valid JSON** (e.g. `{{"key"=>"value"}}` → `{{"key": "value"}}`), so it can
+    be inserted into a JSON/JSONB column without failing or silently storing
+    invalid data. Rows where this couldn't be parsed were set to NULL rather
+    than storing the raw garbage:
+    - **Unparseable, set to NULL:** {n['specs_unparseable_set_null']}
+12. **Final dedup on `id`** (the actual primary key, sourced from `uniq_id`)
+    as a safety net beyond the `pid`-dedup in step 2:
+    - **Duplicate `id` rows removed:** {n['duplicate_id_removed']}
+    - This is a script-level guard, not a substitute for a `UNIQUE`/`PRIMARY
+      KEY` constraint on `products.id` in the schema — that constraint
+      should also exist at the DB level so a future load can't silently
+      drop or overwrite rows on a duplicate id.
 
 ## Row counts
 
@@ -201,9 +294,12 @@ def write_notes(n):
   missing it — the task listed name/price/category as critical, and brand is
   genuinely absent in the source data for many legitimate listings (not a data
   quality bug).
-- **`rating` is kept as-is (text), including the literal value
-  `"No rating available"`**, since the target schema defines `rating` as TEXT,
-  not a numeric column — no conversion was needed or attempted.
+- **`rating` stays a TEXT column** (per the schema — it's not numeric), but
+  `""` and the literal sentinel `"No rating available"` are both normalized
+  to a true NULL rather than stored as text that looks like data.
+- **`product_specifications` is stored as a JSON string**, converted from the
+  source's Ruby hash-rocket syntax. Rows where conversion failed are NULL
+  rather than storing the raw, invalid string.
 - **A row needs *both* `retail_price` and `discounted_price` present** to be
   considered to have a valid price, since the schema keeps both as separate
   columns (`price` and `original_price`).

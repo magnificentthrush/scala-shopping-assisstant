@@ -23,12 +23,31 @@
    - Missing/malformed `category`: 325
    - **Total removed for missing critical fields:** 403
 7. **Removed rows with invalid prices:** 0
-   (non-numeric, zero/negative, or discounted price higher than retail price)
+   (non-numeric, zero/negative, or discounted price higher than retail price;
+   these rows are excluded entirely, not inserted with a 0 or blank price)
 8. **Dropped unused source columns** (per `docs/project-plan.md` §10.1):
    `crawl_timestamp`, `pid`, `is_FK_Advantage_product`, `overall_rating`.
 9. **Renamed columns** to match the `products` table schema:
    `uniq_id`→`id`, `product_name`→`name`, `discounted_price`→`price`,
    `retail_price`→`original_price`, `product_rating`→`rating`.
+10. **Normalized sentinel/missing values to real NULLs**, instead of passing
+    through mixed representations of "no data":
+    - `rating`: empty string and the literal `"No rating available"` → NULL.
+    - `description`, `image_url`, `product_url`, `brand`: empty/whitespace
+      strings → NULL.
+11. **Converted `product_specifications` from Ruby hash-rocket syntax to
+    valid JSON** (e.g. `{"key"=>"value"}` → `{"key": "value"}`), so it can
+    be inserted into a JSON/JSONB column without failing or silently storing
+    invalid data. Rows where this couldn't be parsed were set to NULL rather
+    than storing the raw garbage:
+    - **Unparseable, set to NULL:** 65
+12. **Final dedup on `id`** (the actual primary key, sourced from `uniq_id`)
+    as a safety net beyond the `pid`-dedup in step 2:
+    - **Duplicate `id` rows removed:** 0
+    - This is a script-level guard, not a substitute for a `UNIQUE`/`PRIMARY
+      KEY` constraint on `products.id` in the schema — that constraint
+      should also exist at the DB level so a future load can't silently
+      drop or overwrite rows on a duplicate id.
 
 ## Row counts
 
@@ -49,9 +68,12 @@
   missing it — the task listed name/price/category as critical, and brand is
   genuinely absent in the source data for many legitimate listings (not a data
   quality bug).
-- **`rating` is kept as-is (text), including the literal value
-  `"No rating available"`**, since the target schema defines `rating` as TEXT,
-  not a numeric column — no conversion was needed or attempted.
+- **`rating` stays a TEXT column** (per the schema — it's not numeric), but
+  `""` and the literal sentinel `"No rating available"` are both normalized
+  to a true NULL rather than stored as text that looks like data.
+- **`product_specifications` is stored as a JSON string**, converted from the
+  source's Ruby hash-rocket syntax. Rows where conversion failed are NULL
+  rather than storing the raw, invalid string.
 - **A row needs *both* `retail_price` and `discounted_price` present** to be
   considered to have a valid price, since the schema keeps both as separate
   columns (`price` and `original_price`).
