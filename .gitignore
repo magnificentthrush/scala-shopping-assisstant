@@ -2,12 +2,8 @@
 node_modules/
 target/
 project/target/
-data/raw/*.csv
-data/migrations/
-data/scripts/
-data/seed/
 
 # Backend runtime logs (local only)
 logs/
 *.log
-*.jsonl
+
