@@ -13,7 +13,7 @@ function App() {
       <Navbar />
       <Routes>
         {/* Display the Login page at the root URL ("/") */}
-        <Route path="/" element={<Login />} />
+        <Route path="/" element={<Chat />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
       </Routes>
