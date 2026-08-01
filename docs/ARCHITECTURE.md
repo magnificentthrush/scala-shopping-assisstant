@@ -55,7 +55,7 @@ Because the database is shared, schema changes are no longer a private, disposab
 
 - **Migrations, not one init script.** Schema changes live as numbered SQL files in `data/migrations/`, applied in order and tracked in a `schema_migrations` table (`version INT PRIMARY KEY, applied_at TIMESTAMPTZ`). A migration only runs once, ever, per database — the runner script checks `schema_migrations` before applying anything.
 - **Migrations are structure only.** `CREATE TABLE`, `ALTER TABLE`, indexes — never data. Loading the product catalog is **seeding**, a separate concept, living in `data/seed/` and run manually, once per environment, after the relevant migration has been applied there.
-- **`seed_products.py`** connects via the Supabase client (`SUPABASE_URL` / `SUPABASE_KEY`), not a raw Postgres connection string, and is **idempotent**: it upserts on `id` (`INSERT ... ON CONFLICT (id) DO UPDATE`), so re-running it never duplicates rows.
+- **`seed_products.py`** loads **`data/clean_products.jsonl`** (not raw CSV under `data/raw/`), connects via the Supabase client (`SUPABASE_URL` / `SUPABASE_KEY`), not a raw Postgres connection string, and is **idempotent**: it upserts on `id` (`INSERT ... ON CONFLICT (id) DO UPDATE`), so re-running it never duplicates rows. Produce the JSONL with `data/scripts/clean_products.py` before seeding.
 - **Forward-only migrations.** There is no `docker compose down -v` for a hosted database — you cannot wipe Supabase and start clean. If a migration breaks the shared dev database, the fix is a new corrective migration (e.g. `004_fix_003.sql`), never a hand-edit through the Supabase dashboard. Hand-editing causes schema drift that no migration file records, which silently breaks this whole scheme for everyone else.
 - **Applying to shared dev is not batched.** Whoever writes a migration for a feature applies it to the shared dev database themselves, immediately — not queued for someone else to guess should run it. Post in the team channel when you apply one, so people mid-testing aren't confused by a schema change they didn't expect.
 
@@ -67,10 +67,12 @@ data/
 │   ├── 003_add_messages_and_state.sql
 │   └── 004_add_indexes.sql
 ├── seed/
-│   └── seed_products.py     # data seeding, idempotent, run manually
-├── raw/                     # source CSV, gitignored
+│   └── seed_products.py     # upserts clean_products.jsonl; idempotent; run manually
+├── clean_products.jsonl     # cleaned catalog — seed input
+├── raw/                     # source CSV only (pre-clean); gitignored — not seed input
 └── scripts/
-    └── apply_migrations.py  # migration runner; checks schema_migrations
+    ├── apply_migrations.py  # migration runner; checks schema_migrations
+    └── clean_products.py    # raw → clean_products.jsonl
 ```
 
 ## 3. Authentication & authorization
