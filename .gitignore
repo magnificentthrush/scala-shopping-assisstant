@@ -7,6 +7,4 @@ project/target/
 logs/
 *.log
 
-.agents/
-skills-lock.json
 ISSUES.md
