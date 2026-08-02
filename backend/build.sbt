@@ -6,6 +6,7 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Seq(
       "com.lihaoyi" %% "cask" % "0.9.2",
       "com.lihaoyi" %% "upickle" % "3.3.1",
-      "org.postgresql" % "postgresql" % "42.7.3"
+      "org.postgresql" % "postgresql" % "42.7.3",
+      "com.google.genai" % "google-genai" % "1.60.0"
     )
   )

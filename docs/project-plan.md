@@ -2,7 +2,7 @@
 
 **Product:** ShopPilot (AI shopping assistant)
 **Team:** 4 interns (1 lead + 3 interns)
-**Stack:** React (frontend) + Scala (backend) + Gemma 4 (Google AI Studio) + Supabase Postgres (hosted, shared)
+**Stack:** React (frontend) + Scala (backend) + **Gemini 3.5 Flash Lite** (primary) / **Gemma 4** (fallback) via Google AI Studio + Supabase Postgres (hosted, shared)
 **Duration:** 10 working days
 **Goal:** A working, beyond MVP — not a production system.
 
@@ -16,12 +16,12 @@
 | Scala HTTP framework   | **cask** (fallback: Play)                                                                  | Minimal ceremony, near-zero learning curve for beginners               |
 | JSON library           | **upickle** (or Play JSON if using Play)                                                   | Pairs naturally with cask, simple case-class codecs                    |
 | Database               | **Supabase Postgres (hosted)** — one shared project for every environment                  | No local Postgres to install/reset per person; same schema for everyone, incl. CI and the demo |
-| Containerization       | **Docker Compose for frontend + backend only** — Supabase and Gemma are external            | The database boundary doesn't belong in Docker once it's a shared, hosted service |
+| Containerization       | **Docker Compose for frontend + backend only** — Supabase and Google AI Studio are external            | The database boundary doesn't belong in Docker once it's a shared, hosted service |
 | Schema changes         | **Numbered SQL migrations** in `data/migrations/`, tracked via `schema_migrations`          | Safe, ordered, auditable changes against a database four people share    |
 | Retrieval              | **Postgres full-text search + filters** → top 30 → **reranker** → top 5                    | Clear, demoable pipeline without a vector DB for MVP                   |
 | Vector search          | **Skip for MVP**, stretch goal via `pgvector`                                              | Full vector DB infra is not worth the setup cost in 2 weeks            |
-| LLM provider           | **Gemma 4 via Google AI Studio / Google Cloud API**, abstracted behind a `LLMClient` trait | Fixed provider for the internship; trait still allows mocking/swaps    |
-| Prompt security        | **Two-stage pipeline**: regex pre-filter → Gemma validation call → Gemma assistant call     | Reduces (does not eliminate) prompt-injection risk; fail-closed by design |
+| LLM provider           | **`gemini-3.5-flash-lite` primary**, **Gemma 4 (`gemma-4-31b-it`) fallback on quota exhaustion**, via Google AI Studio / Gemini API, abstracted behind `LLMClient` | Fast primary for day-to-day; Gemma 4 when primary limits are hit; trait still allows mocking/swaps |
+| Prompt security        | **Two-stage pipeline**: regex pre-filter → LLM validation call → LLM assistant call     | Reduces (does not eliminate) prompt-injection risk; fail-closed by design |
 | Auth                   | **JWT + Argon2/bcrypt password hashing**; every conversation route checks resource ownership | Real accounts are in scope; conversation history is per-user, not per-browser |
 | Communication protocol | **REST (JSON over HTTPS)**                                                                 | WebSockets/SSE add complexity with no MVP payoff                       |
 | Product catalog        | **Cleaned `data/clean_products.jsonl`** → seeded into Supabase (see §10)                    | Realistic catalog; raw Kaggle is cleaned first, then seeded — not seeded from raw |
@@ -63,7 +63,7 @@ gantt
 
 ### 1.3 High-level architecture
 
-The full design — durable conversations backed by Supabase, JWT auth with per-resource ownership checks, and the two-stage Gemma security pipeline — is documented in [`ARCHITECTURE.md`](ARCHITECTURE.md). Keep that doc and this plan aligned when the conversation contract changes.
+The full design — durable conversations backed by Supabase, JWT auth with per-resource ownership checks, and the two-stage LLM security pipeline — is documented in [`ARCHITECTURE.md`](ARCHITECTURE.md). Keep that doc and this plan aligned when the conversation contract changes.
 
 ```mermaid
 flowchart TD
@@ -71,10 +71,10 @@ flowchart TD
     FE -->|POST /api/sessions/:id/messages + JWT| BE[Scala Backend]
     BE -->|verify JWT + ownership| Auth[Auth Middleware]
     Auth -->|reject on match| Filter[Regex Pre-filter]
-    Filter -->|1. validate| LLM1[Gemma 4 — validation]
+    Filter -->|1. validate| LLM1[LLM Call #1 — validation]
     LLM1 -->|safe: true only| BE
     BE -->|load / append history| DB[(Supabase: conversations, messages, conversation_state)]
-    BE -->|2. extract intent + filters| LLM2[Gemma 4 — assistant]
+    BE -->|2. extract intent + filters| LLM2[LLM Call #2 — assistant]
     LLM2 -->|structured JSON| BE
     BE -->|3. full-text + filters| PP[ProductProvider → Supabase products]
     PP -->|top 30 candidates| BE
@@ -94,10 +94,10 @@ flowchart TD
 User message
   │
   ▼
-Regex pre-filter → Gemma Call #1 (validation, fail-closed)
+Regex pre-filter → LLM Call #1 (validation, fail-closed)
   │  (only messages that pass are saved and proceed)
   ▼
-Gemma Call #2 — extract intent + filters
+LLM Call #2 — extract intent + filters
   e.g. { category: hiking shoes, waterproof: true, budget: 120 }
   │
   ▼
@@ -113,10 +113,10 @@ Reranker
 Top 5 products
   │
   ▼
-Gemma Call #2 — explain why these match
+LLM Call #2 — explain why these match
 ```
 
-This is intentionally a **3-tier architecture** — nothing exotic. React talks only to your Scala API; your Scala API is the only thing that talks to Gemma 4 and the database (Supabase, hosted — not Docker). That boundary is what lets 4 people work in parallel without stepping on each other.
+This is intentionally a **3-tier architecture** — nothing exotic. React talks only to your Scala API; your Scala API is the only thing that talks to Google AI Studio (Gemini/Gemma) and the database (Supabase, hosted — not Docker). That boundary is what lets 4 people work in parallel without stepping on each other.
 
 ---
 
@@ -130,11 +130,11 @@ This is intentionally a **3-tier architecture** — nothing exotic. React talks 
 | **Must Have (MVP)**                       | Chat UI with send/receive and visible history                                                                     |
 |                                           | User registration/login, JWT auth, ownership checks on every conversation route                                    |
 |                                           | Durable conversations in Supabase: start, list, resume, rename, delete (§4 in `ARCHITECTURE.md`)                   |
-|                                           | Regex pre-filter + Gemma validation call (fail-closed) before any message is trusted                               |
-|                                           | LLM (Gemma 4) extracts intent + structured filters (`category`, `budget`, attributes like `waterproof`, keywords) |
+|                                           | Regex pre-filter + LLM validation call (fail-closed) before any message is trusted                               |
+|                                           | LLM extracts intent + structured filters (`category`, `budget`, attributes like `waterproof`, keywords) — primary `gemini-3.5-flash-lite`, Gemma 4 fallback |
 |                                           | Retrieval via `ProductProvider`: Supabase full-text search + SQL filters → top 30 candidates                       |
 |                                           | Reranker → top 5 products                                                                                         |
-|                                           | Gemma 4 generates a natural-language explanation of why those 5 match, **plus** structured product list (JSON)    |
+|                                           | LLM generates a natural-language explanation of why those 5 match, **plus** structured product list (JSON)    |
 |                                           | One clarifying follow-up question when the query is ambiguous (e.g. missing budget or category)                   |
 |                                           | Conversation memory bounded to current filters + last ~6–10 messages, persisted in Supabase (not in-memory)         |
 |                                           | Basic error handling with a graceful fallback message                                                             |
@@ -173,7 +173,7 @@ This is intentionally a **3-tier architecture** — nothing exotic. React talks 
 
 | Person         | Focus                                                                                                                                          | Rationale                                                                               |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| **You (Lead)** | Architecture, Gemma 4 `LLMClient`, both LLM call prompts (validation + assistant), reranker wiring, `ProductProvider`, hardest integration glue, code review, unblocking others | You have the most Scala experience — put it where mistakes are most expensive to unwind |
+| **You (Lead)** | Architecture, `LLMClient` (Gemini primary / Gemma fallback), both LLM call prompts (validation + assistant), reranker wiring, `ProductProvider`, hardest integration glue, code review, unblocking others | You have the most Scala experience — put it where mistakes are most expensive to unwind |
 | **Intern 2**   | Product catalog: clean JSONL → seed (`data/seed/seed_products.py` from `data/clean_products.jsonl`), Supabase full-text + filter retrieval (top 30) via `ProductProvider` | Mostly data + SQL-shaped work — a good on-ramp into Scala                               |
 | **Intern 3**   | Auth + conversation/session layer: registration/login/JWT, routes, request/response models, migrations for `users`/`conversations`/`messages`/`conversation_state`/`chat_sessions` | Learns the framework basics through a well-scoped, self-contained slice                 |
 | **Intern 4**   | React chat widget, product card UI, login/register screens, API integration, loading/typing states                                             | Frontend-only — no Scala blocker, can start immediately from the frozen API contract    |
@@ -260,7 +260,7 @@ sequenceDiagram
     participant U as User
     participant FE as React Frontend
     participant BE as Scala Backend
-    participant LLM as Gemma 4 (Google AI Studio)
+    participant LLM as Google AI Studio (Gemini / Gemma)
     participant DB as Supabase Postgres
     participant RR as Reranker
 
@@ -366,7 +366,8 @@ final case class AssistantReply(
 
 ```scala
 // The one abstraction the whole LLM integration hangs off of.
-// Implementation: Gemma 4 via Google AI Studio / Google Cloud API.
+// Implementation: Google AI Studio / Gemini API via com.google.genai.
+// Primary model: gemini-3.5-flash-lite. Fallback: gemma-4-31b-it on quota/rate-limit errors.
 // Only the lead should modify this trait once other people depend on it.
 // Call #1 (validation) and Call #2 (assistant) both go through this trait,
 // with different system prompts — see ARCHITECTURE.md §6.
@@ -374,11 +375,15 @@ trait LLMClient {
   def complete(system: String, history: Seq[ConversationTurn]): Future[String]
 }
 
-final case class GemmaLLMClient(apiKey: String, model: String = "gemma-4")(implicit ec: ExecutionContext)
+final case class GemmaLLMClient(
+    apiKey: String,
+    primaryModel: String = "gemini-3.5-flash-lite",
+    fallbackModel: String = "gemma-4-31b-it"
+)(implicit ec: ExecutionContext)
     extends LLMClient {
   def complete(system: String, history: Seq[ConversationTurn]): Future[String] = {
-    // build request with sttp → Google AI Studio / Gemini API endpoint
-    // parse JSON with upickle/circe, return the text content
+    // com.google.genai Client → generateContent(primaryModel, ...)
+    // on quota/rate-limit error → retry with fallbackModel
     ???
   }
 }
@@ -410,12 +415,12 @@ Keeping `LLMClient` and `ProductProvider` as traits means: if the model endpoint
 | Schema changes               | **Numbered SQL migrations** (`data/migrations/`), tracked via `schema_migrations`  | Single init script (fine only for a disposable local DB, not a shared one)      | Forward-only, ordered, auditable; applied via `data/scripts/apply_migrations.py`                                                                                                                                             |
 | DB access                   | Supabase client (REST/PostgREST) for app queries; direct Postgres connection only for migrations | doobie / JDBC directly                                                          | Business logic goes through `ProductProvider`, never raw SQL scattered through services                                                                                                                                     |
 | Product catalog storage     | Supabase `products` table seeded from **`data/clean_products.jsonl`** (see §10)    | —                                                                               | Clean with `data/scripts/clean_products.py` first; seed via `data/seed/seed_products.py` (idempotent upsert) — never seed from `data/raw/`                                                                                    |
-| Product retrieval abstraction | `ProductProvider` trait, `SupabaseProductProvider` as sole impl                  | Direct Supabase calls from business logic                                       | One-file swap if the data store changes later; Gemma never writes SQL                                                                                                                                                        |
-| Retrieval                   | **Postgres full-text (`tsvector`/`tsquery`) + SQL filters** → top 30               | Simple `ILIKE` (fallback if FTS is delayed)                                     | Filters from Gemma 4 (category, budget, attributes) applied in SQL                                                                                                                                                          |
-| Reranker                    | Lightweight scorer (keyword/attribute match + price proximity) over top 30 → top 5 | Optional second Gemma 4 pass if ahead of schedule                               | Keep MVP reranker deterministic and local so demos don't depend on an extra LLM call                                                                                                                                        |
+| Product retrieval abstraction | `ProductProvider` trait, `SupabaseProductProvider` as sole impl                  | Direct Supabase calls from business logic                                       | One-file swap if the data store changes later; the LLM never writes SQL                                                                                                                                                        |
+| Retrieval                   | **Postgres full-text (`tsvector`/`tsquery`) + SQL filters** → top 30               | Simple `ILIKE` (fallback if FTS is delayed)                                     | Filters from the LLM (category, budget, attributes) applied in SQL                                                                                                                                                          |
+| Reranker                    | Lightweight scorer (keyword/attribute match + price proximity) over top 30 → top 5 | Optional second LLM pass if ahead of schedule                               | Keep MVP reranker deterministic and local so demos don't depend on an extra LLM call                                                                                                                                        |
 | Vector search               | **Skip for MVP**; `pgvector` extension as stretch goal                             | Pinecone/Weaviate (overkill for 2 weeks)                                        | Full-text + filters + rerank is enough for a convincing demo                                                                                                                                                                |
-| LLM integration             | **Gemma 4 via Google AI Studio / Google Cloud API**, wrapped behind `LLMClient`    | Other REST LLM APIs (swap via trait)                                            | Two calls per validated turn: (1) safety validation, (2) filter extraction + explanation — see `ARCHITECTURE.md` §6                                                                                                          |
-| Prompt security              | Regex pre-filter (reject-on-match) → Gemma validation call (fail-closed)          | Single-pass validation, no pre-filter                                           | Reduces but does not eliminate prompt-injection risk; costs ~2x LLM latency/tokens per turn                                                                                                                                  |
+| LLM integration             | **`gemini-3.5-flash-lite` primary**, **Gemma 4 fallback**, via Google AI Studio / Gemini API, wrapped behind `LLMClient`    | Other REST LLM APIs (swap via trait)                                            | Two calls per validated turn: (1) safety validation, (2) filter extraction + explanation — see `ARCHITECTURE.md` §6                                                                                                          |
+| Prompt security              | Regex pre-filter (reject-on-match) → LLM validation call (fail-closed)          | Single-pass validation, no pre-filter                                           | Reduces but does not eliminate prompt-injection risk; costs ~2x LLM latency/tokens per turn                                                                                                                                  |
 | Auth                         | JWT + Argon2/bcrypt password hashing                                              | Session cookies, OAuth-only                                                     | Stateless JWT is enough for MVP; every conversation route checks resource ownership against the JWT's `user_id`                                                                                                              |
 | Build tool                  | **sbt**                                                                            | —                                                                               | Standard for Scala                                                                                                                                                                                                          |
 | Testing                     | **munit**                                                                          | ScalaTest                                                                       | munit has simpler syntax and less boilerplate for beginners                                                                                                                                                                 |
@@ -483,15 +488,15 @@ Framed that way, Scala is a reasonable choice **for this company's goals**, even
 | Risk                                                          | Impact                                        | Mitigation                                                                                                                                                                         |
 | ------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Scala learning curve for 3 interns                            | Delayed start on core features                | Pair-program with the lead for the first 2 days; pick the simplest framework (cask); daily 10-min "Scala tip" mini-session                                                         |
-| LLM API cost/latency/rate limits (Gemma 4 / Google AI Studio) | Slow or broken demo                           | Use AI Studio free tier quotas carefully; cache repeated queries; set explicit timeouts with fallback replies; mock LLM responses so frontend work isn't blocked on live API calls |
+| LLM API cost/latency/rate limits (Gemini / Gemma via Google AI Studio) | Slow or broken demo                           | Use AI Studio quotas carefully; primary `gemini-3.5-flash-lite` with automatic Gemma 4 fallback on limit errors; cache repeated queries; set explicit timeouts; mock LLM responses so frontend work isn't blocked |
 | Scope creep (vector search, auth, multi-language, etc.)       | Nothing finishes                              | Enforce the Must/Nice/Future table in §2; only the lead can pull in Nice-to-Have work, and only after Day 6                                                                        |
 | Frontend blocked waiting on backend                           | Wasted days                                   | Freeze the API contract by Day 2; frontend builds against a mock JSON server in parallel                                                                                           |
 | Merge conflicts among 4 people in one repo                    | Lost time, frustration                        | Vertical ownership per person/module; small PRs; only the lead edits the shared wiring/`LLMClient` files                                                                           |
 | Product catalog data quality / legal risk                     | Wasted time or legal exposure                 | Use the public Kaggle e-commerce dataset (§10), not scraping a live store without permission                                                                                       |
-| Live Gemma 4 calls failing during the demo                    | Embarrassing failure in front of stakeholders | Have a recorded backup demo video; test the exact demo script + network beforehand; keep a canned fallback reply path                                                              |
+| Live LLM calls failing during the demo                    | Embarrassing failure in front of stakeholders | Have a recorded backup demo video; test the exact demo script + network beforehand; keep a canned fallback reply path                                                              |
 | Conversation-state design changes mid-sprint                  | Rework across both frontend and backend       | Lock the `ConversationTurn`/`AssistantReply` schema on Day 1–2 and treat changes to it as requiring lead sign-off                                                                  |
 | Schema drift on the shared Supabase dev database               | Confusing bugs that only reproduce for some teammates | Migrations only, numbered and forward-only; whoever writes one applies it immediately and announces it; never hand-edit via the Supabase dashboard (see `ARCHITECTURE.md` §2)      |
-| Prompt injection / jailbreak attempts via chat input           | Off-topic or manipulated assistant behavior, leaked system prompt | Regex pre-filter + fail-closed Gemma validation call before any message is trusted or saved; documented explicitly as risk-reducing, not a guaranteed defense (`ARCHITECTURE.md` §6) |
+| Prompt injection / jailbreak attempts via chat input           | Off-topic or manipulated assistant behavior, leaked system prompt | Regex pre-filter + fail-closed LLM validation call before any message is trusted or saved; documented explicitly as risk-reducing, not a guaranteed defense (`ARCHITECTURE.md` §6) |
 | Two-call LLM pipeline adds latency to every legitimate turn     | Demo feels sluggish                            | Benchmark real round-trip latency on realistic conversation lengths before the demo; keep both prompts short and low-temperature                                                    |
 | IDOR: one user reading/editing another user's conversation      | Privacy breach, embarrassing in a demo         | Every conversation route resolves ownership from the JWT and checks it before touching data — never trust a client-supplied `userId`                                                |
 
@@ -506,12 +511,12 @@ Framed that way, Scala is a reasonable choice **for this company's goals**, even
 | Day    | Focus                        | Backend                                                                                                                                                                  | Frontend                                                               | Integration Point                                        | Testing/Buffer                                                  |
 | ------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
 | **1**  | Kickoff & environment        | sbt project skeleton, Docker Compose w/ frontend + backend only, Supabase project provisioned, framework decided (cask), `/health` endpoint                              | React app skeleton, chat widget shell (no logic)                       | API contract drafted (`docs/API_CONTRACT.md`)            | —                                                               |
-| **2**  | Foundations                  | `data/migrations/001_products_catalog.sql` + `002_init_users_and_conversations.sql` applied; seed from `data/clean_products.jsonl` via `data/seed/seed_products.py`; `GET /api/products`; Gemma 4 API key tested with one manual call | Static chat UI: message bubbles, input box, send button (stubbed data) | Everyone can run the whole stack via `docker compose up` against shared Supabase | CI pipeline running compile + build                             |
-| **3**  | Core services (part 1)       | Registration/login + JWT issuing; Gemma 4 intent+filter extraction via curl/Postman; Supabase full-text + filter retrieval → top 30 via `ProductProvider`                | Chat widget wired to a stubbed `/messages` endpoint                    | —                                                        | Manual smoke test of filter extraction + retrieval              |
-| **4**  | Core services (part 2)       | Wire full pipeline: regex pre-filter → Gemma Call #1 (validate) → save message → Gemma Call #2 (extract filters) → retrieve 30 → rerank → top 5 → explain → structured JSON | Product cards render from real API responses                           | First end-to-end message → product card flow working     | —                                                               |
+| **2**  | Foundations                  | `data/migrations/001_products_catalog.sql` + `002_init_users_and_conversations.sql` applied; seed from `data/clean_products.jsonl` via `data/seed/seed_products.py`; `GET /api/products`; Google AI Studio API key + `gemini-3.5-flash-lite` smoke test | Static chat UI: message bubbles, input box, send button (stubbed data) | Everyone can run the whole stack via `docker compose up` against shared Supabase | CI pipeline running compile + build                             |
+| **3**  | Core services (part 1)       | Registration/login + JWT issuing; LLM intent+filter extraction via curl/Postman; Supabase full-text + filter retrieval → top 30 via `ProductProvider`                | Chat widget wired to a stubbed `/messages` endpoint                    | —                                                        | Manual smoke test of filter extraction + retrieval              |
+| **4**  | Core services (part 2)       | Wire full pipeline: regex pre-filter → LLM Call #1 (validate) → save message → LLM Call #2 (extract filters) → retrieve 30 → rerank → top 5 → explain → structured JSON | Product cards render from real API responses                           | First end-to-end message → product card flow working     | —                                                               |
 | **5**  | Conversation depth           | `003_add_messages_and_state.sql` applied; conversation history persisted in Supabase (list/resume/rename/delete), ownership checks on every route                        | Conversation history displayed; typing indicator; login/register screens | —                                                        | —                                                               |
 | **6**  | **Mid-sprint demo + buffer** | Bug fixing from demo feedback                                                                                                                                            | Bug fixing from demo feedback                                          | **Full internal demo walkthrough**, retro, replan week 2 | First automated tests (munit) for retrieval + filter extraction |
-| **7**  | Quality pass                 | Prompt engineering on both Gemma calls (validation + extraction/explanation quality); tune reranker scoring                                                              | Polish product card layout, price/discount display                     | —                                                        | —                                                               |
+| **7**  | Quality pass                 | Prompt engineering on both LLM calls (validation + extraction/explanation quality); tune reranker scoring                                                              | Polish product card layout, price/discount display                     | —                                                        | —                                                               |
 | **8**  | Hardening / stretch goals    | Error handling for empty results, LLM timeouts, malformed responses, fail-closed validation edge cases; shared logging middleware (`app.log`/`error.log`/`llm.jsonl`); *if ahead of schedule:* pgvector semantic search or SSE streaming | Loading states, empty-state UI, error messages                         | —                                                        | Edge-case testing (empty catalog match, LLM timeout, rejected message)            |
 | **9**  | Deploy & docs                | Deploy to Railway/Render/Fly.io (frontend + backend only; Supabase already hosted); write `README.md` + `ARCHITECTURE.md`                                                | Cross-browser check, final UI polish                                   | Full regression pass on deployed demo                    | Regression testing                                              |
 | **10** | **Demo day + buffer**        | Final bug bash                                                                                                                                                           | Final bug bash                                                         | Demo dry run, retro, handover doc                        | Backup demo video recorded                                      |
@@ -530,7 +535,7 @@ Framed that way, Scala is a reasonable choice **for this company's goals**, even
 
 **API abstraction**
 
-- Every external call (LLM, product data) goes through a trait — `LLMClient` for Gemma, `ProductProvider` for the catalog — no direct HTTP/Supabase calls scattered through business logic.
+- Every external call (LLM, product data) goes through a trait — `LLMClient` for Google AI Studio (Gemini/Gemma), `ProductProvider` for the catalog — no direct HTTP/Supabase calls scattered through business logic.
 
 **Clean architecture**
 
@@ -622,17 +627,17 @@ Cleaning (`data/scripts/clean_products.py`) turns the raw Kaggle export into `da
 | `product_specifications` | `product_specifications` (as text/JSON)   |
 
 
-**MVP approach:** `data/seed/seed_products.py` (1) loads `data/clean_products.jsonl`, (2) optionally samples to a manageable size for the demo via `--limit`, and (3) upserts into Supabase via the Supabase client (`SUPABASE_URL`/`SUPABASE_KEY`), keyed on `id` so re-running it is safe. Column rename/mapping from the raw Kaggle CSV happens in the cleaner, not in the seed script. This is seeding, not a migration — it moves data, not structure, and runs manually once per environment, after `001_products_catalog.sql` has been applied there. The GIN full-text index (created by that migration) lets retrieval return **top 30**, then the reranker selects **top 5** for Gemma 4 to explain.
+**MVP approach:** `data/seed/seed_products.py` (1) loads `data/clean_products.jsonl`, (2) optionally samples to a manageable size for the demo via `--limit`, and (3) upserts into Supabase via the Supabase client (`SUPABASE_URL`/`SUPABASE_KEY`), keyed on `id` so re-running it is safe. Column rename/mapping from the raw Kaggle CSV happens in the cleaner, not in the seed script. This is seeding, not a migration — it moves data, not structure, and runs manually once per environment, after `001_products_catalog.sql` has been applied there. The GIN full-text index (created by that migration) lets retrieval return **top 30**, then the reranker selects **top 5** for the LLM to explain.
 
 ### 10.4 Recommendation pipeline (recap)
 
 ```
 User message
-  → regex pre-filter + Gemma Call #1: validate (fail-closed)
-  → Gemma Call #2: extract intent + filters
+  → regex pre-filter + LLM Call #1: validate (fail-closed)
+  → LLM Call #2: extract intent + filters
   → ProductProvider → Supabase: full-text + filters → top 30
   → Reranker → top 5
-  → Gemma Call #2: explain why these match
+  → LLM Call #2: explain why these match
   → Frontend: chat reply + product cards
 ```
 
@@ -640,4 +645,4 @@ User message
 
 ## Appendix: What "done" looks like on Day 10
 
-A working **ShopPilot** demo where a user registers/logs in, types something like *"I need waterproof shoes for hiking under $120"*, the message passes the regex/Gemma validation pipeline, Gemma extracts filters, Supabase retrieves candidates via `ProductProvider`, the reranker returns top 5, and the assistant replies with a short explanation plus product cards — with the conversation persisted so the user can leave and resume it later. Runs from `docker compose up` locally (frontend + backend, against the team's shared Supabase project) and also live at a deployed demo URL, with a backup recording in case the live version hiccups during the actual presentation.
+A working **ShopPilot** demo where a user registers/logs in, types something like *"I need waterproof shoes for hiking under $120"*, the message passes the regex/LLM validation pipeline, the LLM extracts filters, Supabase retrieves candidates via `ProductProvider`, the reranker returns top 5, and the assistant replies with a short explanation plus product cards — with the conversation persisted so the user can leave and resume it later. Runs from `docker compose up` locally (frontend + backend, against the team's shared Supabase project) and also live at a deployed demo URL, with a backup recording in case the live version hiccups during the actual presentation.
