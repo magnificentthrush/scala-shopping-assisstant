@@ -1,5 +1,5 @@
-// Displays a single product as a card
-// ChatWidget renders this component for each product returned by the assistant
+// Ye component ek single product ko card ki shape mein dikhata hai
+// ChatWidget isko loop mein use karega jab bhi products aayenge
 
 import type { Product } from "../../types";
 
@@ -43,12 +43,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       )}
 
       {product.productUrl ? (
-        <a
-          href={product.productUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-blue-600 mt-2 inline-block hover:underline"
-        >
+        <a href={product.productUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 mt-2 inline-block hover:underline">
           View product →
         </a>
       ) : null}

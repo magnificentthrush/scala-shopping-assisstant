@@ -1,33 +1,43 @@
-// Signup page where new users can create an account
-// The backend is not connected yet, so this form currently provides only the UI.
+// Signup page — connects to the auth API (mocked for now, see api/auth.ts)
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { register } from "../../api/auth";
+import { useAuth } from "../../context/AuthContext";
 
 export default function Signup() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  const navigate = useNavigate();
+  const { setUser } = useAuth();
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
 
-    // Validate that all required fields are filled
     if (!name || !email || !password) {
       setError("Please fill in all fields.");
       return;
     }
-
-    // Validate the minimum password length
     if (password.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
     }
 
-    // TODO: Connect this to the backend /api/auth/signup endpoint once it is available
-    console.log("Signup attempt:", { name, email, password });
-    setError("Backend not connected yet — this is a UI placeholder.");
+    setLoading(true);
+    try {
+      const result = await register(name, email, password);
+      setUser(result.user);
+      navigate("/");
+    } catch (err: any) {
+      setError(err.message || "Signup failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -37,60 +47,53 @@ export default function Signup() {
         <p className="text-sm text-gray-500 mb-6">Sign up to start shopping smarter</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Full name input field */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Full Name
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Jane Doe"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             />
           </div>
 
-          {/* Email input field */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             />
           </div>
 
-          {/* Password input field */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 6 characters"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             />
           </div>
 
-          {/* Display an error message if validation fails */}
           {error && <p className="text-xs text-red-500">{error}</p>}
 
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition-colors"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
-            Sign Up
+            {loading ? "Creating account..." : "Sign Up"}
           </button>
         </form>
 
-        {/* Link to the login page */}
         <p className="text-sm text-gray-500 mt-4 text-center">
           Already have an account?{" "}
           <Link to="/login" className="text-blue-600 hover:underline">

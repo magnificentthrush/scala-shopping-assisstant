@@ -1,29 +1,39 @@
-// Login page where users can enter their email and password
-// The backend is not connected yet, so this form currently provides only the UI.
-// Authentication will be integrated later using the backend API.
+// Login page — connects to the auth API (mocked for now, see api/auth.ts)
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { login } from "../../api/auth";
+import { useAuth } from "../../context/AuthContext";
 
 export default function Login() {
-  // State for the form fields
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // Called when the user clicks the "Log In" button
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); // Prevent the page from reloading
+  const navigate = useNavigate();
+  const { setUser } = useAuth();
 
-    // Basic frontend validation
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+
     if (!email || !password) {
       setError("Please fill in both fields.");
       return;
     }
 
-    // TODO: Connect this to the backend /api/auth/login endpoint once it is available
-    console.log("Login attempt:", { email, password });
-    setError("Backend not connected yet — this is a UI placeholder.");
+    setLoading(true);
+    try {
+      const result = await login(email, password);
+      setUser(result.user);
+      navigate("/"); // go to chat after successful login
+    } catch (err: any) {
+      // err.message comes from our mock rejection or ApiError
+      setError(err.message || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -33,46 +43,41 @@ export default function Login() {
         <p className="text-sm text-gray-500 mb-6">Log in to continue shopping</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Email input field */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             />
           </div>
 
-          {/* Password input field */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             />
           </div>
 
-          {/* Display an error message if one exists */}
           {error && <p className="text-xs text-red-500">{error}</p>}
 
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition-colors"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
-            Log In
+            {loading ? "Logging in..." : "Log In"}
           </button>
         </form>
 
-        {/* Link to the signup page */}
         <p className="text-sm text-gray-500 mt-4 text-center">
           Don't have an account?{" "}
           <Link to="/signup" className="text-blue-600 hover:underline">
