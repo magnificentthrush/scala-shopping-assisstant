@@ -91,7 +91,7 @@ The catalog is **seeded from** `data/clean_products.jsonl` (not the raw Kaggle C
 
 Raw-only fields such as `crawl_timestamp`, `pid`, `is_FK_Advantage_product`, and `overall_rating` are discarded during **cleaning**, not during seeding.
 
-Retrieval flow: Gemma extracts filters → `ProductProvider` runs full-text search + SQL filters against this table → top 30 → reranker → top 5 (see [`ARCHITECTURE.md`](ARCHITECTURE.md) §5).
+Retrieval flow: the LLM extracts filters → `ProductProvider` runs full-text search + SQL filters against this table → top 30 → reranker → top 5 (see [`ARCHITECTURE.md`](ARCHITECTURE.md) §5).
 
 ---
 
