@@ -71,23 +71,23 @@ CREATE INDEX products_category_idx ON products (category);
 
 ### Source data mapping
 
-The catalog is loaded from `data/raw/flipkart_com-ecommerce_sample.csv` by `data/seed/seed_products.py` (see [Seeding](#seeding) below).
+The catalog is **seeded from** `data/clean_products.jsonl` (not the raw Kaggle CSV) by `data/seed/seed_products.py` (see [Seeding](#seeding) below). That JSONL is produced earlier by `data/scripts/clean_products.py` from the raw export under `data/raw/`; cleaning maps and validates fields so each JSONL line already matches the `products` columns.
 
-| Source CSV column | Database column | Transformation |
+| JSONL field | Database column | Notes |
 | --- | --- | --- |
-| `uniq_id` | `id` | Use as-is. |
-| `product_name` | `name` | Use as-is. |
-| `brand` | `brand` | Use as-is; may be empty. |
-| `product_category_tree` | `category` | Parse the leaf or primary category. |
-| `discounted_price` | `price` | Convert to a numeric value. |
-| `retail_price` | `original_price` | Convert to a numeric value. |
-| `product_rating` | `rating` | Use as text. |
-| `description` | `description` | Use as-is. |
-| `image` | `image_url` | Extract the first URL from the list. |
-| `product_url` | `product_url` | Use as-is. |
-| `product_specifications` | `product_specifications` | Use as-is. |
+| `id` | `id` | Already cleaned / validated. |
+| `name` | `name` | Use as-is. |
+| `brand` | `brand` | May be null. |
+| `category` | `category` | Use as-is. |
+| `price` | `price` | Numeric or null. |
+| `original_price` | `original_price` | Numeric or null. |
+| `rating` | `rating` | Stored as text (stringify if needed). |
+| `description` | `description` | May be null. |
+| `image_url` | `image_url` | May be null. |
+| `product_url` | `product_url` | May be null. |
+| `product_specifications` | `product_specifications` | Nested list in JSONL; serialize to text (e.g. JSON string) on upsert. |
 
-Source-only fields such as `crawl_timestamp`, `pid`, `is_FK_Advantage_product`, and `overall_rating` are discarded during seeding.
+Raw-only fields such as `crawl_timestamp`, `pid`, `is_FK_Advantage_product`, and `overall_rating` are discarded during **cleaning**, not during seeding.
 
 Retrieval flow: Gemma extracts filters → `ProductProvider` runs full-text search + SQL filters against this table → top 30 → reranker → top 5 (see [`ARCHITECTURE.md`](ARCHITECTURE.md) §5).
 
@@ -239,4 +239,4 @@ Rules that keep a shared dev database usable by four people at once:
 
 Seeding is **not** a migration — it moves data, not structure, and it is a one-time-per-environment operation, not something that runs on every `docker compose up`.
 
-`data/seed/seed_products.py` loads the CSV, maps columns per the table above, and upserts into `products` via the Supabase client (`SUPABASE_URL` / `SUPABASE_KEY`). It is idempotent (`upsert` on `id`), so re-running it after `001_products_catalog.sql` has been applied never duplicates rows. Run it manually once per environment.
+`data/seed/seed_products.py` loads `data/clean_products.jsonl` (one product object per line; columns already match the table above), and upserts into `products` via the Supabase client (`SUPABASE_URL` / `SUPABASE_KEY`). It is idempotent (`upsert` on `id`), so re-running it after `001_products_catalog.sql` has been applied never duplicates rows. Run it manually once per environment. Do **not** point the seed script at raw files under `data/raw/` — clean first, then seed from the JSONL.
