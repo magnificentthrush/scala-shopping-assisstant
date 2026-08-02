@@ -166,6 +166,8 @@ This is intentionally a **3-tier architecture** — nothing exotic. React talks 
 
 ## 3. Team Planning
 
+> **Superseded by [`workflow.md`](workflow.md).** The vertical ownership model below (one person per feature, end-to-end) blocked testing until every layer of a feature was finished. `workflow.md` reorganizes the same team around horizontal, seam-based tracks that are each independently testable from Day 1. This section is kept for historical context only — use `workflow.md` for actual task assignment.
+
 ### 3.1 Role assignment (based on experience level)
 
 
@@ -495,6 +497,8 @@ Framed that way, Scala is a reasonable choice **for this company's goals**, even
 ---
 
 ## 8. 10-Day Development Timeline
+
+> **Superseded by [`workflow.md`](workflow.md) §5.** The day-by-day breakdown below treats "wire the full pipeline" (Day 4) as a single big-bang integration step. `workflow.md` replaces that with continuous swap-in checkpoints as each real implementation lands, so the pipeline is testable from Day 1 against fakes. This section is kept for historical context only.
 
 
 | Day    | Focus                        | Backend                                                                                                                                                                  | Frontend                                                               | Integration Point                                        | Testing/Buffer                                                  |

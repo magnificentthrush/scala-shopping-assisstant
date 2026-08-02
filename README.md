@@ -256,4 +256,5 @@ Never hardcode secrets. `.env.example` documents the shape; `.env` is gitignored
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full architecture, infra, auth, security pipeline, logging.
 - [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — frontend API request/response shapes (build/mock against these).
 - [`docs/database-schema.md`](docs/database-schema.md) — every table, migrations, seeding.
-- [`docs/project-plan.md`](docs/project-plan.md) — sprint plan, timeline, team roles.
+- [`docs/project-plan.md`](docs/project-plan.md) — sprint plan, scope, risks, tech stack.
+- [`docs/workflow.md`](docs/workflow.md) — horizontal, seam-based task breakdown for parallel team execution (supersedes team roles/timeline in `project-plan.md`).
