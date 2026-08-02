@@ -92,8 +92,10 @@ pip install psycopg2-binary
 export SUPABASE_DB_URL=postgresql://postgres:[password]@[host]:5432/postgres
 python data/scripts/apply_migrations.py
 
-# 2. Seed the product catalog — one time per environment, safe to re-run
-#    (idempotent upsert on id), not something you run on every startup.
+# 2. Seed the product catalog from data/clean_products.jsonl — one time per
+#    environment, safe to re-run (idempotent upsert on id), not something you
+#    run on every startup. Produce/refresh the JSONL with
+#    data/scripts/clean_products.py if needed; do not seed from data/raw/.
 pip install supabase
 export SUPABASE_URL=...
 export SUPABASE_KEY=...
@@ -115,7 +117,7 @@ Rules for the shared dev database (see [`docs/database-schema.md`](docs/database
 | `docker compose logs backend` | See backend logs only |
 | `docker compose ps` | See what's running |
 | `python data/scripts/apply_migrations.py` | Apply any unapplied schema migrations to Supabase |
-| `python data/seed/seed_products.py` | Seed/refresh the product catalog (idempotent) |
+| `python data/seed/seed_products.py` | Seed/refresh the product catalog from `data/clean_products.jsonl` (idempotent) |
 
 ### Why this setup
 
@@ -151,10 +153,12 @@ scala-shopping-assistant/
 │       └── api/                          # calls to the Scala backend
 ├── data/
 │   ├── migrations/                       # numbered, structure-only SQL, applied to Supabase
-│   ├── seed/                             # seed_products.py — data only, idempotent
-│   ├── raw/                               # source CSV, gitignored
+│   ├── seed/                             # seed_products.py — upserts from clean_products.jsonl
+│   ├── clean_products.jsonl              # cleaned catalog — seed input (not raw CSV)
+│   ├── raw/                               # source CSV only; cleaned before seeding; gitignored
 │   └── scripts/
-│       └── apply_migrations.py           # migration runner (checks schema_migrations)
+│       ├── apply_migrations.py           # migration runner (checks schema_migrations)
+│       └── clean_products.py             # raw → clean_products.jsonl
 ├── docs/
 │   ├── ARCHITECTURE.md                   # full architecture: infra, auth, security pipeline, logging
 │   ├── API_CONTRACT.md                   # frontend-facing request/response shapes (mockable)
@@ -167,7 +171,7 @@ scala-shopping-assistant/
 | --- | --- | --- |
 | `backend/` | Backend interns + lead | Routes, auth, conversation/LLM services, `ProductProvider`, logging |
 | `frontend/` | Frontend intern | Chat widget, product cards, API client |
-| `data/` | Catalog owner | Migrations, seed script, raw CSV |
+| `data/` | Catalog owner | Migrations, clean JSONL, seed script, raw CSV (pre-clean only) |
 | `docs/` | Whole team | Architecture, API contract, database schema, project plan |
 
 ---
@@ -232,7 +236,7 @@ This costs roughly 2x LLM latency/tokens per legitimate turn (two sequential Gem
 | Database | Supabase Postgres — hosted, shared across all environments (not Docker) |
 | Product retrieval | `ProductProvider` interface → `SupabaseProductProvider` |
 | LLM | Gemma 4 via Google AI Studio — two-stage calls: validation, then assistant |
-| Catalog | Kaggle e-commerce dataset → seeded into Supabase via `data/seed/seed_products.py` |
+| Catalog | Cleaned `data/clean_products.jsonl` → seeded into Supabase via `data/seed/seed_products.py` |
 | Logging | Shared logging middleware — `app.log`, `error.log`, `llm.jsonl` (dev only, gitignored) |
 
 ## Environment variables

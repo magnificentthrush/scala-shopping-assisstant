@@ -24,7 +24,7 @@
 | Prompt security        | **Two-stage pipeline**: regex pre-filter → Gemma validation call → Gemma assistant call     | Reduces (does not eliminate) prompt-injection risk; fail-closed by design |
 | Auth                   | **JWT + Argon2/bcrypt password hashing**; every conversation route checks resource ownership | Real accounts are in scope; conversation history is per-user, not per-browser |
 | Communication protocol | **REST (JSON over HTTPS)**                                                                 | WebSockets/SSE add complexity with no MVP payoff                       |
-| Product catalog        | **Kaggle e-commerce product dataset** → seeded into Supabase (see §10)                     | Realistic catalog; drop unused cols and map into our `products` schema |
+| Product catalog        | **Cleaned `data/clean_products.jsonl`** → seeded into Supabase (see §10)                    | Realistic catalog; raw Kaggle is cleaned first, then seeded — not seeded from raw |
 | Git workflow           | Trunk-based, short-lived branches, PR + lead review                                        | Small team, avoid long-lived branch drift                              |
 
 
@@ -138,7 +138,7 @@ This is intentionally a **3-tier architecture** — nothing exotic. React talks 
 |                                           | One clarifying follow-up question when the query is ambiguous (e.g. missing budget or category)                   |
 |                                           | Conversation memory bounded to current filters + last ~6–10 messages, persisted in Supabase (not in-memory)         |
 |                                           | Basic error handling with a graceful fallback message                                                             |
-|                                           | Seeded `products` table from the Kaggle e-commerce dataset (§10), mapped to our schema, via `data/seed/seed_products.py` |
+|                                           | Seeded `products` table from `data/clean_products.jsonl` (§10), via `data/seed/seed_products.py` |
 |                                           | Runs locally via `docker compose up` (frontend + backend), against the team's shared Supabase project, plus one working deployed demo link |
 | **Nice to Have**                          | Semantic/vector search via `pgvector` alongside full-text retrieval                                               |
 |                                           | Streaming LLM tokens to the frontend (SSE) for a "typing" effect                                                  |
@@ -174,7 +174,7 @@ This is intentionally a **3-tier architecture** — nothing exotic. React talks 
 | Person         | Focus                                                                                                                                          | Rationale                                                                               |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | **You (Lead)** | Architecture, Gemma 4 `LLMClient`, both LLM call prompts (validation + assistant), reranker wiring, `ProductProvider`, hardest integration glue, code review, unblocking others | You have the most Scala experience — put it where mistakes are most expensive to unwind |
-| **Intern 2**   | Product catalog: Kaggle → schema mapping/seed (`data/seed/seed_products.py`), Supabase full-text + filter retrieval (top 30) via `ProductProvider` | Mostly data + SQL-shaped work — a good on-ramp into Scala                               |
+| **Intern 2**   | Product catalog: clean JSONL → seed (`data/seed/seed_products.py` from `data/clean_products.jsonl`), Supabase full-text + filter retrieval (top 30) via `ProductProvider` | Mostly data + SQL-shaped work — a good on-ramp into Scala                               |
 | **Intern 3**   | Auth + conversation/session layer: registration/login/JWT, routes, request/response models, migrations for `users`/`conversations`/`messages`/`conversation_state`/`chat_sessions` | Learns the framework basics through a well-scoped, self-contained slice                 |
 | **Intern 4**   | React chat widget, product card UI, login/register screens, API integration, loading/typing states                                             | Frontend-only — no Scala blocker, can start immediately from the frozen API contract    |
 
@@ -232,12 +232,14 @@ scala-shopping-assistant/
 │   └── package.json
 ├── data/
 │   ├── raw/
-│   │   └── products.csv              # original Kaggle CSV; gitignored
+│   │   └── products.csv              # original Kaggle CSV; gitignored — not seed input
+│   ├── clean_products.jsonl          # cleaned catalog; seed input for seed_products.py
 │   ├── migrations/                    # numbered, structure-only SQL, applied to Supabase
 │   ├── seed/
-│   │   └── seed_products.py          # cleans CSV, upserts into Supabase (idempotent)
+│   │   └── seed_products.py          # upserts clean_products.jsonl into Supabase (idempotent)
 │   └── scripts/
-│       └── apply_migrations.py       # migration runner (checks schema_migrations)
+│       ├── apply_migrations.py       # migration runner (checks schema_migrations)
+│       └── clean_products.py         # raw → clean_products.jsonl
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── database-schema.md
@@ -407,7 +409,7 @@ Keeping `LLMClient` and `ProductProvider` as traits means: if the model endpoint
 | Database                    | **Supabase Postgres (hosted)** — one shared project, not Docker                    | Local Postgres per developer                                                    | Same schema/data for every environment; no local install/reset; see `ARCHITECTURE.md` §2                                                                                                                                    |
 | Schema changes               | **Numbered SQL migrations** (`data/migrations/`), tracked via `schema_migrations`  | Single init script (fine only for a disposable local DB, not a shared one)      | Forward-only, ordered, auditable; applied via `data/scripts/apply_migrations.py`                                                                                                                                             |
 | DB access                   | Supabase client (REST/PostgREST) for app queries; direct Postgres connection only for migrations | doobie / JDBC directly                                                          | Business logic goes through `ProductProvider`, never raw SQL scattered through services                                                                                                                                     |
-| Product catalog storage     | Supabase `products` table seeded from **Kaggle e-commerce dataset** (see §10)      | —                                                                               | Drop unused source columns; map into our schema; seed via `data/seed/seed_products.py` (idempotent upsert)                                                                                                                   |
+| Product catalog storage     | Supabase `products` table seeded from **`data/clean_products.jsonl`** (see §10)    | —                                                                               | Clean with `data/scripts/clean_products.py` first; seed via `data/seed/seed_products.py` (idempotent upsert) — never seed from `data/raw/`                                                                                    |
 | Product retrieval abstraction | `ProductProvider` trait, `SupabaseProductProvider` as sole impl                  | Direct Supabase calls from business logic                                       | One-file swap if the data store changes later; Gemma never writes SQL                                                                                                                                                        |
 | Retrieval                   | **Postgres full-text (`tsvector`/`tsquery`) + SQL filters** → top 30               | Simple `ILIKE` (fallback if FTS is delayed)                                     | Filters from Gemma 4 (category, budget, attributes) applied in SQL                                                                                                                                                          |
 | Reranker                    | Lightweight scorer (keyword/attribute match + price proximity) over top 30 → top 5 | Optional second Gemma 4 pass if ahead of schedule                               | Keep MVP reranker deterministic and local so demos don't depend on an extra LLM call                                                                                                                                        |
@@ -504,7 +506,7 @@ Framed that way, Scala is a reasonable choice **for this company's goals**, even
 | Day    | Focus                        | Backend                                                                                                                                                                  | Frontend                                                               | Integration Point                                        | Testing/Buffer                                                  |
 | ------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
 | **1**  | Kickoff & environment        | sbt project skeleton, Docker Compose w/ frontend + backend only, Supabase project provisioned, framework decided (cask), `/health` endpoint                              | React app skeleton, chat widget shell (no logic)                       | API contract drafted (`docs/API_CONTRACT.md`)            | —                                                               |
-| **2**  | Foundations                  | `data/migrations/001_products_catalog.sql` + `002_init_users_and_conversations.sql` applied; Kaggle seed script (`data/seed/seed_products.py`); `GET /api/products`; Gemma 4 API key tested with one manual call | Static chat UI: message bubbles, input box, send button (stubbed data) | Everyone can run the whole stack via `docker compose up` against shared Supabase | CI pipeline running compile + build                             |
+| **2**  | Foundations                  | `data/migrations/001_products_catalog.sql` + `002_init_users_and_conversations.sql` applied; seed from `data/clean_products.jsonl` via `data/seed/seed_products.py`; `GET /api/products`; Gemma 4 API key tested with one manual call | Static chat UI: message bubbles, input box, send button (stubbed data) | Everyone can run the whole stack via `docker compose up` against shared Supabase | CI pipeline running compile + build                             |
 | **3**  | Core services (part 1)       | Registration/login + JWT issuing; Gemma 4 intent+filter extraction via curl/Postman; Supabase full-text + filter retrieval → top 30 via `ProductProvider`                | Chat widget wired to a stubbed `/messages` endpoint                    | —                                                        | Manual smoke test of filter extraction + retrieval              |
 | **4**  | Core services (part 2)       | Wire full pipeline: regex pre-filter → Gemma Call #1 (validate) → save message → Gemma Call #2 (extract filters) → retrieve 30 → rerank → top 5 → explain → structured JSON | Product cards render from real API responses                           | First end-to-end message → product card flow working     | —                                                               |
 | **5**  | Conversation depth           | `003_add_messages_and_state.sql` applied; conversation history persisted in Supabase (list/resume/rename/delete), ownership checks on every route                        | Conversation history displayed; typing indicator; login/register screens | —                                                        | —                                                               |
@@ -577,6 +579,8 @@ Framed that way, Scala is a reasonable choice **for this company's goals**, even
 
 **Chosen source:** a public **Kaggle e-commerce product dataset** (Flipkart-style columns). Do **not** scrape a live production store — ToS risk and wasted time.
 
+**Pipeline:** raw file under `data/raw/` → `data/scripts/clean_products.py` → **`data/clean_products.jsonl`** → `data/seed/seed_products.py` → Supabase `products`. Seeding always starts from the cleaned JSONL, never from the raw CSV.
+
 ### 10.1 Source columns (raw dataset)
 
 
@@ -599,25 +603,26 @@ Framed that way, Scala is a reasonable choice **for this company's goals**, even
 
 The canonical schema reference — column descriptions, indexes, source-data mapping, and the four other tables (`users`, `conversations`, `messages`, `conversation_state`, `chat_sessions`) — is in [`database-schema.md`](database-schema.md). The `products` table itself is applied to Supabase via the migration `data/migrations/001_products_catalog.sql`, not a standalone init script; keep that file and `database-schema.md` synchronized when the schema changes, and never edit an already-applied migration — write a new one instead (see `ARCHITECTURE.md` §2).
 
-### 10.3 Column mapping (seed script)
+### 10.3 Column mapping (clean → seed)
 
+Cleaning (`data/scripts/clean_products.py`) turns the raw Kaggle export into `data/clean_products.jsonl`. **Seeding reads that JSONL only** — not files under `data/raw/`.
 
-| Source (Kaggle)          | Target (`products`)                       |
+| Cleaned JSONL field      | Target (`products`)                       |
 | ------------------------ | ----------------------------------------- |
-| `uniq_id`                | `id`                                      |
-| `product_name`           | `name`                                    |
+| `id`                     | `id`                                      |
+| `name`                   | `name`                                    |
 | `brand`                  | `brand`                                   |
-| `product_category_tree`  | `category` (parse leaf / primary segment) |
-| `discounted_price`       | `price`                                   |
-| `retail_price`           | `original_price`                          |
-| `product_rating`         | `rating`                                  |
+| `category`               | `category`                                |
+| `price`                  | `price`                                   |
+| `original_price`         | `original_price`                          |
+| `rating`                 | `rating`                                  |
 | `description`            | `description`                             |
-| `image`                  | `image_url`                               |
+| `image_url`              | `image_url`                               |
 | `product_url`            | `product_url`                             |
-| `product_specifications` | `product_specifications`                  |
+| `product_specifications` | `product_specifications` (as text/JSON)   |
 
 
-**MVP approach:** `data/seed/seed_products.py` (1) loads the Kaggle CSV, (2) drops the unused columns, (3) maps/renames into the schema above, (4) optionally samples to a manageable size for the demo, and (5) upserts into Supabase via the Supabase client (`SUPABASE_URL`/`SUPABASE_KEY`), keyed on `id` so re-running it is safe. This is seeding, not a migration — it moves data, not structure, and runs manually once per environment, after `001_products_catalog.sql` has been applied there. The GIN full-text index (created by that migration) lets retrieval return **top 30**, then the reranker selects **top 5** for Gemma 4 to explain.
+**MVP approach:** `data/seed/seed_products.py` (1) loads `data/clean_products.jsonl`, (2) optionally samples to a manageable size for the demo via `--limit`, and (3) upserts into Supabase via the Supabase client (`SUPABASE_URL`/`SUPABASE_KEY`), keyed on `id` so re-running it is safe. Column rename/mapping from the raw Kaggle CSV happens in the cleaner, not in the seed script. This is seeding, not a migration — it moves data, not structure, and runs manually once per environment, after `001_products_catalog.sql` has been applied there. The GIN full-text index (created by that migration) lets retrieval return **top 30**, then the reranker selects **top 5** for Gemma 4 to explain.
 
 ### 10.4 Recommendation pipeline (recap)
 
