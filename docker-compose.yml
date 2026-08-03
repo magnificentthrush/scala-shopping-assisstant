@@ -29,7 +29,7 @@ services:
         echo "  Health check       →  $${BACKEND_URL:-http://localhost:8080}/health"
         echo "  Frontend           →  $${FRONTEND_URL:-http://localhost:5173}"
         echo ""
-        exec sbt "~run"
+        exec sbt "~runMain assistant.Main"
 
   frontend:
     build: ./frontend
