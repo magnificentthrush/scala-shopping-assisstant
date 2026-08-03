@@ -12,6 +12,7 @@ services:
       GEMMA_API_KEY: ${GEMMA_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:8080}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LLM_LOGGING: ${LLM_LOGGING:-true}
     volumes:
@@ -19,6 +20,16 @@ services:
       - sbt_cache:/root/.sbt
       - ivy2_cache:/root/.ivy2
       - coursier_cache:/root/.cache/coursier
+    command:
+      - sh
+      - -c
+      - |
+        echo ""
+        echo "  ShopPilot backend  →  $${BACKEND_URL:-http://localhost:8080}"
+        echo "  Health check       →  $${BACKEND_URL:-http://localhost:8080}/health"
+        echo "  Frontend           →  $${FRONTEND_URL:-http://localhost:5173}"
+        echo ""
+        exec sbt "~run"
 
   frontend:
     build: ./frontend

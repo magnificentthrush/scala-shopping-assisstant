@@ -17,4 +17,12 @@ object Main extends cask.MainRoutes {
     )
 
   initialize()
+
+  // Prefer localhost for host-machine browsers; Cask binds 0.0.0.0 inside Docker.
+  val publicUrl = sys.env.getOrElse("BACKEND_URL", s"http://localhost:$port")
+  println(s"")
+  println(s"  ShopPilot backend ready")
+  println(s"  ➜  Local:   $publicUrl")
+  println(s"  ➜  Health:  $publicUrl/health")
+  println(s"")
 }
