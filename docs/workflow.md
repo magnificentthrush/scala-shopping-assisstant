@@ -11,7 +11,7 @@ The original plan assigns **vertical** ownership: one person owns "catalog" end-
 This document reorganizes the same work **horizontally**, around the seams (interfaces) the architecture already defines, so that:
 
 - Every track can start on **Day 1**, without waiting for any other track's code to exist.
-- Every track is **independently testable** the moment it's written — with real infrastructure where that's cheap (a real seeded Supabase table, a real curl call to Gemma), and with fakes where a dependency hasn't landed yet.
+- Every track is **independently testable** the moment it's written — with real infrastructure where that's cheap (a real seeded Supabase table, a real curl call to Google AI Studio), and with fakes where a dependency hasn't landed yet.
 - Integration is **continuous, not a single day** — real implementations get swapped in behind their interface as they land, one at a time, and the same tests that passed against the fake pass again against the real thing.
 
 ## 2. The current state (so nobody re-derives this from scratch)
@@ -21,7 +21,7 @@ Confirmed by reading the repo directly:
 - Backend is only [`backend/src/main/scala/assistant/Main.scala`](../backend/src/main/scala/assistant/Main.scala) — a `cask.MainRoutes` object with `/` and `/health`. No `domain/`, `auth/`, `services/`, `repo/`, or `providers/` packages exist yet.
 - Frontend is the default Vite + React template ([`frontend/src/App.tsx`](../frontend/src/App.tsx)) — no `ChatWidget`, no `ProductCard`, no `api/` client.
 - `data/` has only `scripts/clean_products.py` and `clean_products.jsonl`. **`data/migrations/` and `data/seed/seed_products.py` do not exist yet**, even though `README.md`, `ARCHITECTURE.md`, and `ISSUES.md` describe them as if they're already built. Track 1 below has to write them, not just run them.
-- [`backend/build.sbt`](../backend/build.sbt) has `cask`, `upickle`, and the raw `postgresql` JDBC driver — no test framework (`munit`), no `sttp` (for calling Gemma), no JWT/password-hashing library yet. Track 0 and Track 2/3 add these as they're needed.
+- [`backend/build.sbt`](../backend/build.sbt) has `cask`, `upickle`, and the raw `postgresql` JDBC driver — no test framework (`munit`), no `com.google.genai` (for calling Gemini/Gemma), no JWT/password-hashing library yet. Track 0 and Track 2/3 add these as they're needed.
 - No CI exists yet.
 
 None of this needs to be undone — it means every track below starts from a genuinely clean slate.
@@ -30,7 +30,7 @@ None of this needs to be undone — it means every track below starts from a gen
 
 1. **Day 1, lead only, half a day.** Codify the interfaces the docs already describe on paper — the domain shapes in [`API_CONTRACT.md`](API_CONTRACT.md), the `LLMClient` and `ProductProvider` traits already named in [`ARCHITECTURE.md`](ARCHITECTURE.md) §5 and [`project-plan.md`](project-plan.md) §4.4, plus one new trait (`ConversationRepo`) needed to make persistence fakeable too. This is mostly transcription of already-agreed shapes — low risk, fast, and it's the one PR everyone else's branch starts from.
 2. **Every other track starts immediately** against those traits and their fakes. Nobody waits on anybody else's real implementation.
-3. **Real implementations land continuously**, each provably correct in isolation, using whatever is cheapest to test against (real seeded Supabase for retrieval, real curl calls for Gemma, real JWT round-trips for auth) — never blocked on another track's real implementation.
+3. **Real implementations land continuously**, each provably correct in isolation, using whatever is cheapest to test against (real seeded Supabase for retrieval, real curl calls to Google AI Studio, real JWT round-trips for auth) — never blocked on another track's real implementation.
 4. **The message pipeline is built and tested from Day 1** against fakes. As each real implementation lands, the lead flips one line of wiring in `Main.scala` and re-runs the *same* tests — now as true end-to-end checks. This replaces the old single "wire everything" day with a series of small, low-risk swaps.
 
 ```mermaid
@@ -136,7 +136,7 @@ Each track lists: **owner**, **files it owns**, **what it depends on**, **how to
 
 **How to test in isolation:**
 - Unit tests: password hash + verify round-trip; JWT issue → verify → expiry.
-- Integration tests via curl/Postman against every route listed above, run against the real shared Supabase project — every one of them is fully functional without Gemma or a real catalog existing.
+- Integration tests via curl/Postman against every route listed above, run against the real shared Supabase project — every one of them is fully functional without a live LLM or real catalog existing.
 - An explicit IDOR test: a second user's JWT against the first user's `conversationId` must get `403`, per [`ARCHITECTURE.md`](ARCHITECTURE.md) §3.
 
 **Acceptance criteria:**
@@ -152,7 +152,7 @@ Each track lists: **owner**, **files it owns**, **what it depends on**, **how to
 **Owner:** Lead (kept with the lead per the existing "only the lead touches `LLMClient`" rule in `project-plan.md` §3.2 — this is also where the security guarantees the whole pipeline depends on live).
 
 **Owns:**
-- `backend/src/main/scala/assistant/services/GemmaLLMClient.scala` — implements Track 0's `LLMClient`
+- `backend/src/main/scala/assistant/services/GemmaLLMClient.scala` — implements Track 0's `LLMClient` using Google AI Studio (`com.google.genai`): **primary** `gemini-3.5-flash-lite`, **fallback** `gemma-4-31b-it` on quota/rate-limit errors
 - The two system prompts: validation (Call #1) and assistant/filter-extraction+explanation (Call #2), per [`ARCHITECTURE.md`](ARCHITECTURE.md) §6
 - `backend/src/main/scala/assistant/services/RegexPreFilter.scala`
 
@@ -161,14 +161,15 @@ Each track lists: **owner**, **files it owns**, **what it depends on**, **how to
 **How to test in isolation:**
 - Prompt iteration via curl/Postman straight against the Google AI Studio endpoint — provable before any Scala code exists.
 - Unit tests for defensive JSON parsing using canned response strings (valid, malformed, missing `safe` field) — proves the fail-closed rule without any network call.
-- A network-gated integration test (skipped unless `GEMMA_API_KEY` is set) that exercises `GemmaLLMClient.complete()` for real.
+- A network-gated integration test (skipped unless `GEMMA_API_KEY` is set) that exercises `GemmaLLMClient.complete()` against `gemini-3.5-flash-lite`, and verifies fallback to `gemma-4-31b-it` when the primary returns quota errors.
 - `RegexPreFilter` is pure-function testable: known injection patterns must reject, known legitimate shopping phrases (e.g. *"ignore the mesh ones, I need leather"*) must pass.
 
 **Acceptance criteria:**
-- [ ] `GemmaLLMClient` implements `LLMClient` and is covered by parsing unit tests independent of network access.
+- [ ] `GemmaLLMClient` implements `LLMClient`, uses `gemini-3.5-flash-lite` by default, and falls back to `gemma-4-31b-it` on quota/rate-limit errors.
+- [ ] Covered by parsing unit tests independent of network access.
 - [ ] Fail-closed proven: malformed/missing-`safe` JSON is treated identically to `safe: false`.
 - [ ] `RegexPreFilter` denylist is narrow and pattern-specific (per `ARCHITECTURE.md` §6), with tests for both false positives and true positives.
-- [ ] Manually verified against the real Gemma API at least once before merging.
+- [ ] Manually verified against the real Google AI Studio API at least once before merging (primary model, and fallback path if possible).
 
 ---
 
@@ -188,11 +189,11 @@ Each track lists: **owner**, **files it owns**, **what it depends on**, **how to
   - `FakeLLMClient` returns malformed/`safe:false` → rejects, zero writes, fail-closed.
   - Happy path → correct `filters_snapshot`/`safe` written via the fake repo, `conversation_state` updated, and the returned shape matches `AssistantReply` in `API_CONTRACT.md`.
   - Call #1 passes but `FakeLLMClient` is configured to fail Call #2 → generic "something went wrong" response, no stale state written.
-- All of the above is provable with zero real infrastructure — no Supabase, no Gemma API key needed.
+- All of the above is provable with zero real infrastructure — no Supabase, no Google AI Studio API key needed.
 
 **Swap-in checkpoints (replaces the old "wire everything on Day 4"):**
 - As Track 1's `SupabaseProductProvider`, Track 2's `SupabasePostgresConversationRepo`, and Track 3's `GemmaLLMClient` each individually pass their own acceptance criteria, the lead changes one line each in `Main.scala` (the only file the lead exclusively owns) to point at the real implementation instead of the fake.
-- The *same* orchestration tests are re-run after each swap — they should still pass, now as genuine end-to-end integration tests against real Supabase and/or real Gemma. A failure at this point means the real implementation doesn't honor its trait's contract, not that the orchestration logic is wrong — this isolates the bug immediately.
+- The *same* orchestration tests are re-run after each swap — they should still pass, now as genuine end-to-end integration tests against real Supabase and/or real Google AI Studio. A failure at this point means the real implementation doesn't honor its trait's contract, not that the orchestration logic is wrong — this isolates the bug immediately.
 
 **Acceptance criteria:**
 - [ ] Full pipeline behavior (regex reject, fail-closed validation, happy path, Call #2 failure) is proven against fakes before any real dependency lands.
@@ -248,7 +249,7 @@ The key difference from the old timeline: there is no day where "wire the full p
 | 0 (Lead) | `domain/`, `services/LLMClient.scala` (trait), `services/providers/ProductProvider.scala` (trait), `repo/ConversationRepo.scala` (trait), all `Fake*`/`InMemory*` test doubles, `logging/Logger.scala` (stub) |
 | 1 (Intern A) | `data/migrations/001_*.sql`, products-related parts of `004_*.sql`, `data/seed/seed_products.py`, `services/providers/SupabaseProductProvider.scala`, `services/Reranker.scala` |
 | 2 (Intern B) | `data/migrations/002_*.sql`, `003_*.sql`, non-product parts of `004_*.sql`, `auth/`, `repo/SupabasePostgresConversationRepo.scala`, `http/AuthRoutes.scala`, `http/ConversationRoutes.scala` |
-| 3 (Lead) | `services/GemmaLLMClient.scala`, prompt text/constants, `services/RegexPreFilter.scala` |
+| 3 (Lead) | `services/GemmaLLMClient.scala` (Gemini primary / Gemma fallback), prompt text/constants, `services/RegexPreFilter.scala` |
 | 4 (Lead) | `services/ConversationOrchestrator.scala`, `http/MessageRoutes.scala`, `Main.scala` (wiring — lead-exclusive, per `project-plan.md` §3.2) |
 | 5 (Intern C) | everything under `frontend/src/` |
 

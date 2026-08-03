@@ -2,7 +2,7 @@
 
 **ShopPilot** is an AI shopping assistant. Users create an account, chat in plain language (e.g. *"waterproof hiking shoes under $120"*), and the app finds matching products and explains why they fit — remembering the conversation across follow-up messages and across sessions.
 
-**Stack:** React (frontend) · Scala / Cask (backend) · Gemma 4 via Google AI Studio · Supabase Postgres (hosted) · JWT auth
+**Stack:** React (frontend) · Scala / Cask (backend) · **Gemini 3.5 Flash Lite** (primary) / **Gemma 4** (fallback) via Google AI Studio · Supabase Postgres (hosted) · JWT auth
 
 **Goal:** A working, demoable MVP — not a production system.
 
@@ -12,9 +12,9 @@
 
 1. A user registers/logs in; the backend issues a JWT.
 2. Starting a chat creates a durable `conversation` plus a `chat_session` (the `sessionId` the frontend holds).
-3. Each message passes a regex pre-filter, then a Gemma **validation** call, before it's trusted — rejected messages are never saved.
-4. Once validated, a second Gemma call extracts/updates structured filters and drafts a reply, using recent history + current filters (not the full transcript).
-5. The backend's `ProductProvider` searches Supabase (full-text + filters → top 30 → rerank → top 5); Gemma explains the matches; the UI shows the reply plus product cards.
+3. Each message passes a regex pre-filter, then an LLM **validation** call (`gemini-3.5-flash-lite`, Gemma 4 fallback on quota limits), before it's trusted — rejected messages are never saved.
+4. Once validated, a second LLM call extracts/updates structured filters and drafts a reply, using recent history + current filters (not the full transcript).
+5. The backend's `ProductProvider` searches Supabase (full-text + filters → top 30 → rerank → top 5); the LLM explains the matches; the UI shows the reply plus product cards.
 6. Users can list, resume, rename, and delete past conversations — all ownership-checked against the JWT.
 
 Full design, including the security pipeline and every table's reasoning: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -35,7 +35,7 @@ Full design, including the security pipeline and every table's reasoning: [`docs
 cp .env.example .env
 ```
 
-Fill in `.env` (get these from whoever manages the team's Supabase project, plus your own Gemma key):
+Fill in `.env` (get these from whoever manages the team's Supabase project, plus your Google AI Studio API key):
 
 ```
 SUPABASE_URL=
@@ -180,7 +180,7 @@ scala-shopping-assistant/
 
 Full write-up (infra, auth, six conversation actions, `ProductProvider`, the two-stage security pipeline, logging): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Full table-by-table schema: [`docs/database-schema.md`](docs/database-schema.md).
 
-Three tiers. React talks only to the Scala API; the Scala API is the only thing that talks to Gemma 4 and Supabase. Docker's boundary covers only the first two tiers — Supabase and Gemma are external, hosted services.
+Three tiers. React talks only to the Scala API; the Scala API is the only thing that talks to Google AI Studio (Gemini/Gemma) and Supabase. Docker's boundary covers only the first two tiers — Supabase and the LLM API are external, hosted services.
 
 ```mermaid
 flowchart TB
@@ -197,7 +197,7 @@ flowchart TB
     end
 
     subgraph T3["Tier 3 — Data (hosted, external)"]
-        LLM[Gemma 4]
+        LLM[Gemini 3.5 Flash Lite / Gemma 4 fallback]
         SB[(Supabase Postgres)]
     end
 
@@ -213,14 +213,14 @@ flowchart TB
 1. **React** sends the JWT, `sessionId`, and the new message.
 2. **Auth middleware** verifies the JWT and resolves `user_id`; every route touching a conversation checks this `user_id` against the resource's owner **before** anything else runs (IDOR protection).
 3. **Regex pre-filter** rejects obvious prompt-injection patterns outright — no LLM call, nothing saved, reject-on-match (never "strip and continue").
-4. **Gemma Call #1 (validation only)** classifies the message as safe or not. Fail-closed: anything that isn't a clean `{"safe": true}` is treated as unsafe.
+4. **LLM Call #1 (validation only)** classifies the message as safe or not (`gemini-3.5-flash-lite` primary; falls back to `gemma-4-31b-it` on quota/rate-limit errors). Fail-closed: anything that isn't a clean `{"safe": true}` is treated as unsafe.
 5. Only now is the user's message written to `messages` (with a `filters_snapshot` and `safe: true`).
-6. **Gemma Call #2 (assistant)** extracts/updates filters and drafts a response, using `conversation_state.filters` + the last ~6–10 messages.
-7. **`ProductProvider`** (interface) → **`SupabaseProductProvider`** (impl) runs full-text search + SQL filters on Supabase → top 30 → reranker → top 5. Gemma never writes SQL.
+6. **LLM Call #2 (assistant)** extracts/updates filters and drafts a response, using `conversation_state.filters` + the last ~6–10 messages (same primary/fallback policy).
+7. **`ProductProvider`** (interface) → **`SupabaseProductProvider`** (impl) runs full-text search + SQL filters on Supabase → top 30 → reranker → top 5. The LLM never writes SQL.
 8. The assistant's turn is saved to `messages`; `conversation_state.filters` is overwritten with the latest values.
 9. React renders the reply and product cards.
 
-This costs roughly 2x LLM latency/tokens per legitimate turn (two sequential Gemma calls) — a deliberate trade-off for defense-in-depth, not a guaranteed defense. See `ARCHITECTURE.md` §6 for the full reasoning and the exact rejection/fail-closed rules.
+This costs roughly 2x LLM latency/tokens per legitimate turn (two sequential LLM calls) — a deliberate trade-off for defense-in-depth, not a guaranteed defense. See `ARCHITECTURE.md` §6 for the full reasoning and the exact rejection/fail-closed rules.
 
 ---
 
@@ -235,7 +235,7 @@ This costs roughly 2x LLM latency/tokens per legitimate turn (two sequential Gem
 | Conversation state | Supabase Postgres — durable `conversations`/`messages`, hot-path `conversation_state`, ephemeral `chat_sessions` |
 | Database | Supabase Postgres — hosted, shared across all environments (not Docker) |
 | Product retrieval | `ProductProvider` interface → `SupabaseProductProvider` |
-| LLM | Gemma 4 via Google AI Studio — two-stage calls: validation, then assistant |
+| LLM | **Primary:** `gemini-3.5-flash-lite` · **Fallback:** Gemma 4 (`gemma-4-31b-it`) on quota exhaustion · Google AI Studio · two-stage calls: validation, then assistant |
 | Catalog | Cleaned `data/clean_products.jsonl` → seeded into Supabase via `data/seed/seed_products.py` |
 | Logging | Shared logging middleware — `app.log`, `error.log`, `llm.jsonl` (dev only, gitignored) |
 
