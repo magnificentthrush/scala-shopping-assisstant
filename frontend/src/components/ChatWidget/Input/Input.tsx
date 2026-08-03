@@ -94,7 +94,7 @@ export default function Input({ value, onChange, onSend, disabled }: InputProps)
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={disabled}
-            placeholder="Send a message e.g. waterproof running shoes under $100...""
+            placeholder="e.g. waterproof running shoes under $100..."
             className="flex-1 bg-transparent text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)] outline-none disabled:opacity-50"
           />
           <button
