@@ -1,59 +1,38 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: dark;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  background: #0e0e0e;
-  color: #f3f4f6;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+/* Dark theme (default) */
+:root,
+[data-theme="dark"] {
+  --bg-app: #0e0e0e;
+  --bg-sidebar: #171717;
+  --bg-surface: #242424;
+  --bg-surface-alt: #2a2a2a;
+  --border-color: #374151;
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --btn-bg: #ffffff;
+  --btn-bg-hover: #e5e7eb;
+  --btn-text: #111827;
+  --bubble-user-bg: #374151;
+  --bubble-user-text: #ffffff;
 }
 
-html,
-body,
-#root {
-  min-height: 100%;
-}
-
-html {
-  background: #0e0e0e;
+/* Light theme */
+[data-theme="light"] {
+  --bg-app: #ffffff;
+  --bg-sidebar: #f7f7f8;
+  --bg-surface: #f1f1f2;
+  --bg-surface-alt: #e5e5e6;
+  --border-color: #e5e7eb;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --btn-bg: #111827;
+  --btn-bg-hover: #1f2937;
+  --btn-text: #ffffff;
+  --bubble-user-bg: #2563eb;
+  --bubble-user-text: #ffffff;
 }
 
 body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  overflow-x: hidden;
-  -webkit-tap-highlight-color: rgb(255 255 255 / 0.08);
-}
-
-button,
-a,
-input {
-  touch-action: manipulation;
-}
-
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-}
-
-::selection {
-  background: rgb(59 130 246 / 0.35);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+  background-color: var(--bg-app);
 }
