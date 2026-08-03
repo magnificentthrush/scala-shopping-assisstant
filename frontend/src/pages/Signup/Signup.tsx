@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { LoaderCircle, ShoppingBag } from "lucide-react";
 import { register } from "../../api/auth";
 import { useAuth } from "../../context/AuthContext";
 
@@ -41,66 +42,108 @@ export default function Signup() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-64px)] bg-gray-50">
-      <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 w-full max-w-sm">
-        <h2 className="text-xl font-bold text-gray-800 mb-1">Create an account</h2>
-        <p className="text-sm text-gray-500 mb-6">Sign up to start shopping smarter</p>
+    <div className="flex min-h-dvh items-center justify-center bg-[#0e0e0e] px-4 py-10">
+      <section
+        aria-labelledby="signup-title"
+        className="w-full max-w-md rounded-2xl border border-white/10 bg-[#171717] p-6 shadow-2xl shadow-black/30 sm:p-8"
+      >
+        <div className="mb-7 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-950/40">
+          <ShoppingBag aria-hidden="true" size={21} />
+        </div>
+        <h1 id="signup-title" className="text-pretty text-2xl font-bold tracking-tight text-white">
+          Create an Account
+        </h1>
+        <p className="mt-1 text-sm text-gray-400">Sign up to start shopping smarter.</p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="mt-7 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+            <label htmlFor="signup-name" className="mb-1.5 block text-sm font-medium text-gray-200">
+              Full Name
+            </label>
             <input
+              id="signup-name"
+              name="name"
               type="text"
+              autoComplete="name"
+              required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Jane Doe"
+              placeholder="Jane Doe…"
               disabled={loading}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              aria-describedby={error ? "signup-error" : undefined}
+              className="w-full rounded-xl border border-white/10 bg-[#222] px-3.5 py-3 text-sm text-white placeholder:text-gray-600 hover:border-white/20 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:opacity-50"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label htmlFor="signup-email" className="mb-1.5 block text-sm font-medium text-gray-200">
+              Email
+            </label>
             <input
+              id="signup-email"
+              name="email"
               type="email"
+              autoComplete="email"
+              spellCheck={false}
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder="you@example.com…"
               disabled={loading}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              aria-describedby={error ? "signup-error" : undefined}
+              className="w-full rounded-xl border border-white/10 bg-[#222] px-3.5 py-3 text-sm text-white placeholder:text-gray-600 hover:border-white/20 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:opacity-50"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label htmlFor="signup-password" className="mb-1.5 block text-sm font-medium text-gray-200">
+              Password
+            </label>
             <input
+              id="signup-password"
+              name="password"
               type="password"
+              autoComplete="new-password"
+              minLength={6}
+              required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder="At least 6 characters…"
               disabled={loading}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              aria-describedby={error ? "signup-error" : "password-help"}
+              className="w-full rounded-xl border border-white/10 bg-[#222] px-3.5 py-3 text-sm text-white placeholder:text-gray-600 hover:border-white/20 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:opacity-50"
             />
+            <p id="password-help" className="mt-1.5 text-xs text-gray-500">
+              Use at least 6 characters.
+            </p>
           </div>
 
-          {error && <p className="text-xs text-red-500">{error}</p>}
+          {error && (
+            <p id="signup-error" role="alert" aria-live="polite" className="rounded-lg bg-red-950/50 px-3 py-2 text-sm text-red-300">
+              {error}
+            </p>
+          )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/30 transition-[background-color,box-shadow] hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#171717] disabled:opacity-60"
           >
-            {loading ? "Creating account..." : "Sign Up"}
+            {loading && <LoaderCircle aria-hidden="true" size={16} className="animate-spin" />}
+            {loading ? "Creating Account…" : "Create Account"}
           </button>
         </form>
 
-        <p className="text-sm text-gray-500 mt-4 text-center">
+        <p className="mt-6 text-center text-sm text-gray-400">
           Already have an account?{" "}
-          <Link to="/login" className="text-blue-600 hover:underline">
-            Log in
+          <Link
+            to="/login"
+            className="font-medium text-blue-400 underline-offset-4 hover:text-blue-300 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+          >
+            Log In
           </Link>
         </p>
-      </div>
+      </section>
     </div>
   );
 }

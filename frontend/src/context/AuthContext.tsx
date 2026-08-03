@@ -1,7 +1,7 @@
 // Provides authentication state to the whole app.
 // Any component can call useAuth() to get the current user and login/logout functions.
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
 import type { User } from "../types";
 import { getStoredUser, isAuthenticated, logout as logoutApi } from "../api/auth";
@@ -16,26 +16,20 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  // On app load (or page refresh), check localStorage for an existing session
-  useEffect(() => {
-    if (isAuthenticated()) {
-      setUser(getStoredUser());
-      setIsLoggedIn(true);
-    }
-  }, []);
+  // Read storage during the initial render so protected routes never see a
+  // temporary logged-out state while a valid local session is being restored.
+  const [user, setUser] = useState<User | null>(() =>
+    isAuthenticated() ? getStoredUser() : null
+  );
+  const isLoggedIn = user !== null;
 
   function handleSetUser(newUser: User | null) {
     setUser(newUser);
-    setIsLoggedIn(!!newUser);
   }
 
   function handleLogout() {
     logoutApi();
     setUser(null);
-    setIsLoggedIn(false);
   }
 
   return (

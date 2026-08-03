@@ -88,7 +88,15 @@ function saveAuth(auth: AuthResponse) {
 
 export function getStoredUser(): User | null {
   const raw = localStorage.getItem("user");
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as User;
+  } catch {
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    return null;
+  }
 }
 
 export function getStoredToken(): string | null {

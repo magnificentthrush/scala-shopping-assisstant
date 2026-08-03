@@ -1,7 +1,7 @@
 // Main chat widget — dark theme, shows a centered logo+title when the chat is empty
 // (matching the reference UI), otherwise shows the message thread.
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { Message } from "../../types";
 import ProductCard from "../ProductCard/ProductCard";
 import Input from "./Input/Input";
@@ -18,24 +18,27 @@ export default function ChatWidget({ conversationId, sessionId, onFirstMessageSe
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadMessages();
+  const loadMessages = useCallback(async () => {
+    setLoadError("");
+    try {
+      const res = await resumeConversation(conversationId);
+      setMessages(res.messages);
+    } catch {
+      setLoadError("We couldn’t load this conversation. Try again.");
+    }
   }, [conversationId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    loadMessages();
+  }, [loadMessages]);
 
-  async function loadMessages() {
-    try {
-      const res = await resumeConversation(conversationId);
-      setMessages(res.messages); // empty array is fine — shows the centered welcome state
-    } catch (err) {
-      console.error("Failed to load conversation:", err);
-    }
-  }
+  useEffect(() => {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+  }, [messages]);
 
   async function handleSend() {
     if (!input.trim() || loading) return;
@@ -87,30 +90,43 @@ export default function ChatWidget({ conversationId, sessionId, onFirstMessageSe
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex flex-col h-screen flex-1 bg-[#0e0e0e]">
+    <section aria-label="Shopping assistant chat" className="flex h-dvh min-w-0 flex-1 flex-col bg-[#0e0e0e]">
+      {loadError && (
+        <div role="alert" className="mx-auto mt-20 flex w-[calc(100%-2rem)] max-w-2xl items-center justify-between gap-3 rounded-xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+          <span>{loadError}</span>
+          <button type="button" onClick={loadMessages} className="shrink-0 rounded-lg px-2 py-1 font-semibold hover:bg-red-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400">
+            Try Again
+          </button>
+        </div>
+      )}
       {isEmpty ? (
         // Centered welcome state — matches the reference "Chatbot UI" screen
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-          <h2 className="text-2xl font-bold text-white mb-1">ShopPilot</h2>
-          <p className="text-sm text-gray-500">Tell me what you're looking for — I'll help you find it.</p>
+        <div className="flex flex-1 flex-col items-center justify-center px-5 text-center">
+          <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-xl font-bold text-white shadow-lg shadow-blue-950/40" aria-hidden="true">
+            S
+          </div>
+          <h1 className="text-balance text-3xl font-bold tracking-tight text-white">ShopPilot</h1>
+          <p className="mt-2 max-w-md text-pretty text-sm leading-6 text-gray-400">
+            Describe what you need, your budget, and any must-have features. ShopPilot will help you compare the best options.
+          </p>
         </div>
       ) : (
         // Normal message thread
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 max-w-2xl w-full mx-auto">
+        <div role="log" aria-live="polite" aria-relevant="additions" className="mx-auto w-full max-w-3xl flex-1 space-y-5 overflow-y-auto px-4 pb-6 pt-20 sm:px-6">
           {messages.map((msg) => (
             <div key={msg.id} className={msg.role === "user" ? "flex justify-end" : "flex justify-start"}>
-              <div className="max-w-[80%]">
+              <div className="min-w-0 max-w-[88%] sm:max-w-[80%]">
                 <div
-                  className={`rounded-2xl px-4 py-2.5 text-sm ${
+                  className={`whitespace-pre-wrap wrap-break-word rounded-2xl px-4 py-3 text-sm leading-6 ${
                     msg.role === "user"
-                      ? "bg-gray-700 text-white"
+                      ? "bg-blue-600 text-white"
                       : "bg-[#1a1a1a] border border-gray-800 text-gray-200"
                   }`}
                 >
                   {msg.content}
                 </div>
                 {msg.products && msg.products.length > 0 && (
-                  <div className="flex gap-3 overflow-x-auto mt-2 pb-2">
+                  <div aria-label="Recommended products" className="mt-3 flex gap-3 overflow-x-auto pb-2">
                     {msg.products.map((p) => (
                       <ProductCard key={p.id} product={p} />
                     ))}
@@ -122,8 +138,8 @@ export default function ChatWidget({ conversationId, sessionId, onFirstMessageSe
 
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-[#1a1a1a] border border-gray-800 rounded-2xl px-4 py-2.5 text-sm text-gray-500">
-                Typing...
+              <div role="status" className="rounded-2xl border border-gray-800 bg-[#1a1a1a] px-4 py-2.5 text-sm text-gray-400">
+                Finding options…
               </div>
             </div>
           )}
@@ -132,6 +148,6 @@ export default function ChatWidget({ conversationId, sessionId, onFirstMessageSe
       )}
 
       <Input value={input} onChange={setInput} onSend={handleSend} disabled={loading} />
-    </div>
+    </section>
   );
 }

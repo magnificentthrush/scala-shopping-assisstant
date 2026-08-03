@@ -23,6 +23,32 @@ export interface ConversationTurn {
   content: string;              // Text content of the message
 }
 
+export interface Message extends ConversationTurn {
+  id: string;
+  sequenceNumber: number;
+  createdAt: string;
+  products?: Product[];
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt: string;
+}
+
+export interface User {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+}
+
 // Data structure returned by the backend for an assistant response
 export interface AssistantReply {
   mode: "recommend" | "info" | "clarify" | "other";
