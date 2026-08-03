@@ -49,7 +49,7 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex">
+     <div className="flex relative">
       <Sidebar
         activeConversationId={conversationId}
         onSelectConversation={handleSelectConversation}

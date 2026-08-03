@@ -1,5 +1,4 @@
-// Ye component ek single product ko card ki shape mein dikhata hai
-// ChatWidget isko loop mein use karega jab bhi products aayenge
+// Product card — dark theme version
 
 import type { Product } from "../../types";
 
@@ -12,14 +11,14 @@ export default function ProductCard({ product }: ProductCardProps) {
     product.originalPrice && product.originalPrice > product.price;
 
   return (
-    <div className="border border-gray-200 rounded-xl p-3 w-56 shrink-0 bg-white shadow-sm hover:shadow-md transition-shadow">
+    <div className="border border-gray-800 rounded-xl p-3 w-56 shrink-0 bg-[#1a1a1a] hover:border-gray-600 transition-colors">
       <img
         src={product.imageUrl || "https://placehold.co/200x200?text=No+Image"}
         alt={product.name}
         className="w-full h-32 object-cover rounded-lg mb-2"
       />
 
-      <h3 className="text-sm font-semibold line-clamp-2 text-gray-800">
+      <h3 className="text-sm font-semibold line-clamp-2 text-gray-100">
         {product.name}
       </h3>
 
@@ -28,22 +27,18 @@ export default function ProductCard({ product }: ProductCardProps) {
       )}
 
       <div className="flex items-center gap-2 mt-1">
-        <span className="text-sm font-bold text-gray-900">
-          ${product.price}
-        </span>
+        <span className="text-sm font-bold text-white">${product.price}</span>
         {hasDiscount && (
-          <span className="text-xs text-gray-400 line-through">
-            ${product.originalPrice}
-          </span>
+          <span className="text-xs text-gray-500 line-through">${product.originalPrice}</span>
         )}
       </div>
 
       {product.rating && (
-        <p className="text-xs text-yellow-600 mt-1">⭐ {product.rating}</p>
+        <p className="text-xs text-yellow-500 mt-1">⭐ {product.rating}</p>
       )}
 
       {product.productUrl ? (
-        <a href={product.productUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 mt-2 inline-block hover:underline">
+        <a href={product.productUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 mt-2 inline-block hover:underline">
           View product →
         </a>
       ) : null}
