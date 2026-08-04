@@ -1,39 +1,89 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { Check, X, Eye, EyeOff } from "lucide-react";
 import { register } from "../../api/auth";
-import { useAuth } from "../../context/AuthContext";
+import { isValidEmail, isValidPassword } from "../../utils/validation";
 
 export default function Signup() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
 
-  const navigate = useNavigate();
-  const { setUser } = useAuth();
+  const passwordChecks = [
+    { label: "At least 6 characters", valid: password.length >= 6 },
+    { label: "At least one number", valid: /\d/.test(password) },
+    { label: "At least one uppercase letter", valid: /[A-Z]/.test(password) },
+  ];
+  const showChecklist = password.length > 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
     if (!name || !email || !password) {
       setError("Please fill in all fields.");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (!isValidEmail(email)) {
+      setError("Please enter a valid email address.");
       return;
     }
+    const passwordCheck = isValidPassword(password);
+    if (!passwordCheck.valid) {
+      setError(passwordCheck.message!);
+      return;
+    }
+
     setLoading(true);
     try {
-      const result = await register(name, email, password);
-      setUser(result.user);
-      navigate("/");
+      await register(name, email, password);
+      setSubmittedEmail(email);
     } catch (err: any) {
       setError(err.message || "Signup failed. Please try again.");
     } finally {
       setLoading(false);
     }
+  }
+
+  if (submittedEmail) {
+    return (
+      <div
+        className="relative flex items-center justify-center min-h-screen px-4 overflow-hidden"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 0%, #0d1b3d 0%, #05070f 55%, #000000 100%)",
+        }}
+      >
+        <div
+          className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full blur-3xl opacity-30"
+          style={{ background: "radial-gradient(circle, #2b4bff 0%, transparent 70%)" }}
+        />
+        <div className="relative w-full max-w-sm text-center">
+          <div
+            className="flex items-center justify-center w-16 h-16 rounded-2xl text-3xl font-bold text-white mx-auto mb-6"
+            style={{
+              background: "linear-gradient(135deg, #2b4bff 0%, #0f1b4d 100%)",
+              boxShadow: "0 6px 28px rgba(43, 75, 255, 0.5)",
+            }}
+          >
+            S
+          </div>
+          <h2 className="text-2xl font-semibold text-white mb-3 tracking-tight">Check your email</h2>
+          <p className="text-base text-slate-400 mb-6 leading-relaxed">
+            We sent a verification link to{" "}
+            <span className="text-white font-medium">{submittedEmail}</span>. Click the link to
+            activate your account, then log in.
+          </p>
+          <Link to="/login" className="text-base text-blue-400 hover:text-blue-300 transition-colors">
+            Back to login
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -44,7 +94,7 @@ export default function Signup() {
           "radial-gradient(ellipse 80% 60% at 50% 0%, #0d1b3d 0%, #05070f 55%, #000000 100%)",
       }}
     >
-      {/* ambient glow accents, no boxes */}
+      {/* ambient glow accents */}
       <div
         className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full blur-3xl opacity-30"
         style={{ background: "radial-gradient(circle, #2b4bff 0%, transparent 70%)" }}
@@ -115,14 +165,41 @@ export default function Signup() {
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Password
             </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
-              disabled={loading}
-              className="w-full bg-[#0b1330] border border-slate-700 rounded-xl px-4 py-3 text-base text-white placeholder-slate-600 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-colors disabled:opacity-50"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                disabled={loading}
+                className="w-full bg-[#0b1330] border border-slate-700 rounded-xl px-4 py-3 pr-11 text-base text-white placeholder-slate-600 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-colors disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+
+            {showChecklist && (
+              <div className="mt-2.5 space-y-1">
+                {passwordChecks.map((check) => (
+                  <div key={check.label} className="flex items-center gap-1.5 text-xs">
+                    {check.valid ? (
+                      <Check size={13} className="text-emerald-400 shrink-0" />
+                    ) : (
+                      <X size={13} className="text-slate-600 shrink-0" />
+                    )}
+                    <span className={check.valid ? "text-emerald-400" : "text-slate-500"}>
+                      {check.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {error && <p className="text-sm text-red-400">{error}</p>}

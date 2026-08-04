@@ -5,6 +5,7 @@ import ProtectedRoute from "./components/ProtectedRoute/ProtectedRoute";
 import Chat from "./pages/Chat/Chat";
 import Login from "./pages/Login/Login";
 import Signup from "./pages/Signup/Signup";
+import VerifyEmail from "./pages/VerifyEmail/VerifyEmail";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
             />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

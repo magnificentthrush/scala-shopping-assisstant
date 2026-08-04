@@ -1,14 +1,12 @@
-// Provides authentication state to the whole app.
-// Any component can call useAuth() to get the current user and login/logout functions.
-
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import type { User } from "../types";
-import { getStoredUser, isAuthenticated, logout as logoutApi } from "../api/auth";
+import { restoreSession, logout as logoutApi } from "../api/auth";
 
 interface AuthContextType {
   user: User | null;
   isLoggedIn: boolean;
+  loading: boolean;
   setUser: (user: User | null) => void;
   logout: () => void;
 }
@@ -16,30 +14,41 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Read storage during the initial render so protected routes never see a
-  // temporary logged-out state while a valid local session is being restored.
-  const [user, setUser] = useState<User | null>(() =>
-    isAuthenticated() ? getStoredUser() : null
-  );
-  const isLoggedIn = user !== null;
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    checkExistingSession();
+  }, []);
+
+  async function checkExistingSession() {
+    const restoredUser = await restoreSession();
+    if (restoredUser) {
+      setUser(restoredUser);
+      setIsLoggedIn(true);
+    }
+    setLoading(false);
+  }
 
   function handleSetUser(newUser: User | null) {
     setUser(newUser);
+    setIsLoggedIn(!!newUser);
   }
 
-  function handleLogout() {
-    logoutApi();
+  async function handleLogout() {
+    await logoutApi();
     setUser(null);
+    setIsLoggedIn(false);
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn, setUser: handleSetUser, logout: handleLogout }}>
+    <AuthContext.Provider value={{ user, isLoggedIn, loading, setUser: handleSetUser, logout: handleLogout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-// Custom hook — use this in any component instead of useContext directly
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error("useAuth must be used inside AuthProvider");
