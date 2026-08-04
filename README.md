@@ -11,7 +11,7 @@
 ## How it works (short version)
 
 1. A user registers/logs in; the backend issues a JWT.
-2. Starting a chat creates a durable `conversation` plus a `chat_session` (the `sessionId` the frontend holds).
+2. Starting a chat creates only a `chat_session` (the `sessionId` the frontend holds). The durable `conversation` row is created lazily on the first successfully accepted user message.
 3. Each message passes a regex pre-filter, then an LLM **validation** call (`gemini-3.5-flash-lite`, Gemma 4 fallback on quota limits), before it's trusted — rejected messages are never saved.
 4. Once validated, a second LLM call extracts/updates structured filters and drafts a reply, using recent history + current filters (not the full transcript).
 5. The backend's `ProductProvider` searches Supabase (full-text + filters → top 30 → rerank → top 5); the LLM explains the matches; the UI shows the reply plus product cards.

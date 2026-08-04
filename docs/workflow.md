@@ -130,7 +130,7 @@ Each track lists: **owner**, **files it owns**, **what it depends on**, **how to
 - `data/migrations/002_init_users_and_conversations.sql`, `003_add_messages_and_state.sql`, and the non-product indexes in `004_add_indexes.sql`
 - `backend/src/main/scala/assistant/auth/` — registration, login, JWT issue/verify, password hashing (Argon2/bcrypt)
 - `backend/src/main/scala/assistant/repo/SupabasePostgresConversationRepo.scala` — the real implementation of Track 0's `ConversationRepo`
-- The CRUD routes that never touch LLM or products: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/conversations`, `GET /api/conversations`, `POST /api/conversations/{id}/resume`, `PATCH /api/conversations/{id}`, `DELETE /api/conversations/{id}`
+- The CRUD routes that never touch LLM or products: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/conversations` (creates session handle only; no durable conversation row yet), `GET /api/conversations`, `POST /api/conversations/{id}/resume`, `PATCH /api/conversations/{id}`, `DELETE /api/conversations/{id}`
 
 **Depends on:** Track 0's domain classes and `ConversationRepo` trait. Nothing else — notably, none of these routes need a real `LLMClient` or `ProductProvider` to be fully built and tested.
 

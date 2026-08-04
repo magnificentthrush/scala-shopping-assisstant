@@ -127,7 +127,7 @@ CREATE TABLE conversations (
 );
 ```
 
-The durable, user-facing chat history. `last_message_at` drives the sort order of `GET /api/conversations` (most recently active first). `title` is nullable — an untitled chat is valid.
+The durable, user-facing chat history. `last_message_at` drives the sort order of `GET /api/conversations` (most recently active first). `title` is nullable — an untitled chat is valid. Conversation rows are created lazily only after the first user message is accepted; opening a new chat without sending a message must not create an empty `conversations` row.
 
 **Delete is a hard delete.** `ON DELETE CASCADE` on `user_id` (and on every table below that references `conversations.id`) means deleting a conversation removes its messages, state, and sessions in the same operation. There is deliberately no `deleted_at` / soft-delete column for MVP — do not add one unless explicitly requested later.
 
@@ -189,7 +189,7 @@ CREATE TABLE chat_sessions (
 );
 ```
 
-The ephemeral runtime handle — one row per active connection/tab. The `sessionId` the frontend sends on `POST /api/sessions/{sessionId}/messages` is a `chat_sessions.id`. Resuming a past conversation (`POST /api/conversations/{conversationId}/resume`) creates a **new** row here pointing at the **same** `conversation_id`; it never creates a new conversation and never touches `messages` or `conversation_state`. `expires_at` is nullable and reserved for a future cleanup job — nothing reads it yet.
+The ephemeral runtime handle — one row per active connection/tab. The `sessionId` the frontend sends on `POST /api/sessions/{sessionId}/messages` is a `chat_sessions.id`. Starting a new chat creates this session handle first, and the durable `conversations` row is created only when the first message is accepted. Resuming a past conversation (`POST /api/conversations/{conversationId}/resume`) creates a **new** row here pointing at the **same** `conversation_id`; it never creates a new conversation and never touches `messages` or `conversation_state`. `expires_at` is nullable and reserved for a future cleanup job — nothing reads it yet.
 
 ### Indexes
 

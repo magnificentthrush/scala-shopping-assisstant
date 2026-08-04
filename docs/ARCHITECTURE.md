@@ -94,11 +94,21 @@ The app has real accounts, not anonymous sessions. `users` stores `full_name`, `
 
 No separate sessions/tokens table is needed for stateless JWT. If refresh tokens are added later, that gets its own migration and its own docs section — it is explicitly out of scope now.
 
+### Authentication hardening requirements (must implement)
+
+These are easy to skip and are treated as implementation requirements, not optional polish:
+
+- **Rate-limit auth endpoints.** Apply server-side rate limiting on `register`, `login`, and `forgot-password` style endpoints to reduce brute-force attempts and email-bombing abuse.
+- **Prevent account enumeration.** Password-reset requests must always return a neutral response like "If that email exists, we sent a link." Never reveal whether an email is registered.
+- **Expire and single-use verify/reset tokens.** Email verification and password reset tokens must have short expiry windows and must be invalidated immediately after first successful use.
+- **Use constant-time credential verification.** Password checks must use vetted Argon2/bcrypt library verification paths; never implement custom string/hash comparisons.
+- **Email deliverability is part of readiness.** Configure a verified sender domain with SPF/DKIM (and DMARC if available) so auth emails reliably arrive and do not land in spam.
+
 ## 4. Conversations: durable history vs. ephemeral sessions
 
 Two ideas are deliberately kept separate:
 
-- **`conversations`** — durable, user-facing chat history. Created once, lives forever (until deleted), has a title, and sorts a user's chat list by `last_message_at`.
+- **`conversations`** — durable, user-facing chat history. Created lazily only when the first user message is accepted by the pipeline, then lives until deleted, has a title, and sorts a user's chat list by `last_message_at`.
 - **`chat_sessions`** — an ephemeral runtime handle: one row per active connection/tab, pointing at a `conversation_id`. The `sessionId` the frontend holds and sends on every message *is* a `chat_sessions.id`.
 
 This split is what makes "resume" work correctly: resuming a past conversation creates a **new `chat_sessions` row** against the **same `conversation_id`**. The full message history and current filters carry over unchanged — nothing about the conversation itself is touched, only a new runtime handle is minted.
@@ -114,8 +124,8 @@ Full DDL, column types, and constraints are in [`database-schema.md`](database-s
 
 | # | Action | Endpoint | Notes |
 | --- | --- | --- | --- |
-| 1 | Start new chat | `POST /api/conversations` | Creates a `conversations` row + a `chat_sessions` row; returns `sessionId`. |
-| 2 | Send a follow-up message | `POST /api/sessions/{sessionId}/messages` | Resolves `sessionId → conversation_id`, checks ownership, loads state + recent messages, runs the pipeline (§6), persists results. |
+| 1 | Start new chat | `POST /api/conversations` | Creates only a `chat_sessions` row and returns `sessionId`. No `conversations` row is written yet. |
+| 2 | Send a message | `POST /api/sessions/{sessionId}/messages` | Resolves session ownership, runs the pipeline (§6), and lazily creates the `conversations` row on the first accepted message before persisting message/state. |
 | 3 | View conversation history | `GET /api/conversations` | Scoped to the authenticated user, ordered by `last_message_at DESC`. |
 | 4 | Resume a past conversation | `POST /api/conversations/{conversationId}/resume` | Creates a **new** `chat_sessions` row against the same conversation. History/state unaffected. |
 | 5 | Delete a conversation | `DELETE /api/conversations/{conversationId}` | Ownership-checked. **Hard delete**, `ON DELETE CASCADE` removes messages/state/sessions. No soft-delete/trash — that's deliberate MVP scope, not an oversight. |
