@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="sbt: com.google.http-client:google-http-client:1.46.2:jar" type="java-imported" external-system-id="SBT">
+    <properties groupId="com.google.http-client" artifactId="google-http-client" version="1.46.2" baseVersion="1.46.2" />
+    <CLASSES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/com/google/http-client/google-http-client/1.46.2/google-http-client-1.46.2.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/com/google/http-client/google-http-client/1.46.2/google-http-client-1.46.2-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
