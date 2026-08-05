@@ -116,7 +116,7 @@ This split is what makes "resume" work correctly: resuming a past conversation c
 Current filter state and turn-by-turn history are also kept apart, for a different reason:
 
 - **`conversation_state`** — one row per conversation, current filters only (e.g. `{ category, budget, waterproof }`). This is the hot path: "load current filters for this conversation" is a primary-key point lookup, not a scan over message history.
-- **`messages`** — the durable, ordered (`sequence_number`, not just timestamps) turn history, including `filters_snapshot` and `safe` per row. These two columns conceptually duplicate information available elsewhere, but they exist as an **audit trail**: they record what the system believed *at that point in time*. `conversation_state` is mutable and current-only, so it cannot answer "what did we think the filters were three turns ago?" — `messages.filters_snapshot` can.
+- **`messages`** — the durable, ordered (`sequence_number`, not just timestamps) turn history, including `filters_snapshot` per row as an **audit trail** of filters believed *at that point in time*. `conversation_state` is mutable and current-only, so it cannot answer "what did we think the filters were three turns ago?" — `messages.filters_snapshot` can. There is no `safe` column on `messages`: rejected turns are never inserted, so presence in the table already means Call #1 passed.
 
 Full DDL, column types, and constraints are in [`database-schema.md`](database-schema.md).
 
@@ -171,7 +171,7 @@ Do **not** wait for Call #2 before creating the conversation / saving the user m
 
 1. **Commit phase A (durable):**
    - If first message on this session: **lazy-create** `conversations` + `conversation_state` (`filters = '{}'`), set `chat_sessions.conversation_id`.
-   - **INSERT** the user `messages` row (`role=user`, `safe=true`, `regenerate_count=0`).
+   - **INSERT** the user `messages` row (`role=user`, `regenerate_count=0`).
    - Update `conversations.last_message_at` (user activity is real even if the assistant never replies).
    - Do **not** update `conversation_state.filters` yet — filters come from Call #2.
 2. **Phase B (assistant):** run Call #2 → product search → on success INSERT assistant message and **then** UPDATE `conversation_state.filters`.
@@ -203,7 +203,7 @@ Authorization: Bearer <JWT>
 
 - `messageId` must be a **user** message in the conversation owned by this session/user.
 - Eligible only if there is **no successful assistant reply after that message** for this turn (orphan user turn), or the product defines “regenerate last incomplete turn” equivalently.
-- Re-runs **Call #2 only** (and product retrieval) using: locked `conversation_state.filters` + recent messages including this user message. Call #1 is not required again for that text (already `safe=true`); optionally re-validate if you want defense-in-depth — MVP may skip.
+- Re-runs **Call #2 only** (and product retrieval) using: locked `conversation_state.filters` + recent messages including this user message. Call #1 is not required again for that text (already validated when the row was inserted); optionally re-validate if you want defense-in-depth — MVP may skip.
 - On success: INSERT assistant message; UPDATE `conversation_state.filters`; return the same shape as a normal message reply.
 - On failure: leave DB as incomplete; return a regeneratable error again.
 
@@ -232,7 +232,7 @@ If two messages for the same `conversation_id` are processed at nearly the same 
 4. **On Call #1 pass — commit phase A** (short transaction):
    - If no conversation yet: INSERT `conversations`, INSERT `conversation_state` (`filters='{}'`), UPDATE `chat_sessions.conversation_id`.
    - Lock `conversation_state` if it exists (`FOR UPDATE`).
-   - INSERT user `messages` row (`safe=true`, `regenerate_count=0`).
+   - INSERT user `messages` row (`regenerate_count=0`).
    - UPDATE `conversations.last_message_at`.
    - Commit. Frontend may already show the user bubble as “sent / generating…”.
 5. Call #2 with latest filters + recent messages + this user text. ProductProvider search.
@@ -300,7 +300,7 @@ Call #1 — LLM, VALIDATION ONLY (narrow, single-purpose prompt;
     │
     ▼ safe:true — COMMIT PHASE A
     │   • Lazy-create `conversations` + `conversation_state` if first message
-    │   • Append user row to `messages` (`safe=true`, `regenerate_count=0`)
+    │   • Append user row to `messages` (`regenerate_count=0`)
     │   • Do NOT update `conversation_state.filters` yet
     │
 Call #2 — LLM, ASSISTANT ONLY (extract filters + generate response;
@@ -466,7 +466,7 @@ Step by step:
 4. Business logic resolves `sessionId → conversation_id` via `chat_sessions`, and checks that `chat_sessions.user_id` (or `conversations.user_id`) matches the JWT's `user_id`. Mismatch → reject before touching anything else.
 5. Loads `conversation_state.filters` (point lookup) and the last ~6–10 rows from `messages`.
 6. **Call #1** (validation) runs against the new message + recent context. Fail-closed on `safe:false` or any parse/timeout error — reject, nothing persisted.
-7. Only now: the user's message is appended to `messages` (with a `filters_snapshot` and `safe: true`).
+7. Only now: the user's message is appended to `messages` (filters still updated after Call #2; no DB `safe` column).
 8. **Call #2** (assistant) extracts/updates filters and drafts a response, using history + current filters.
 9. Business logic calls `ProductProvider.search(filters)` → `SupabaseProductProvider` → Supabase full-text search + filters → top 30 → reranker → top 5.
 10. The assistant's turn is appended to `messages`; `conversation_state.filters` is updated (point-lookup table, current-only).
