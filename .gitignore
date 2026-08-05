@@ -15,3 +15,5 @@ explanation/
 
 .postman/
 postman/
+.metals/
+.vscode/

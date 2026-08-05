@@ -26,7 +26,6 @@ import scala.util.{Failure, Success, Try}
   */
 object PromptValidator {
 
-  private val CallTimeout = 15.seconds
 
   private val SystemPrompt =
     """You are a security classifier for a shopping assistant. Your ONLY job is to
@@ -49,6 +48,7 @@ object PromptValidator {
       |User message:
       |""".stripMargin
 
+  private val CallTimeout = 15.seconds
   private def buildPrompt(message: String): String = SystemPrompt + message
 
   /** Validates a single message. Never throws — any failure fails closed. */
