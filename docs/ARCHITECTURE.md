@@ -1,14 +1,25 @@
 # Architecture
 
-This is the design of **ShopPilot**, an AI shopping assistant: a React frontend, a Scala/Cask backend, Gemma 4 for language understanding, and Supabase Postgres for all persistent data. It covers infrastructure, authentication, multi-turn conversations, product retrieval, the prompt-security pipeline, and logging.
+This is the design of **ShopPilot**, an AI shopping assistant: a React frontend, a Scala/Cask backend, **Gemini 3.5 Flash Lite** (primary) with **Gemma 4 fallback** for language understanding via Google AI Studio, and Supabase Postgres for all persistent data. It covers infrastructure, authentication, multi-turn conversations, product retrieval, the prompt-security pipeline, and logging.
 
 ## 1. Tiers and infrastructure
 
-The system is a 3-tier application. React talks only to the Scala API; the Scala API is the only thing that talks to Gemma 4 and to the database.
+The system is a 3-tier application. React talks only to the Scala API; the Scala API is the only thing that talks to the LLM (Google AI Studio) and to the database.
 
 - **Presentation** — React, in Docker.
 - **Application** — Scala/Cask backend, in Docker. All auth, conversation orchestration, prompt validation, and product retrieval logic lives here.
-- **Data** — Gemma 4 (Google AI Studio, external API) and Supabase Postgres (hosted, external). Neither runs inside Docker.
+- **Data** — Google AI Studio (Gemini API: **`gemini-3.5-flash-lite` primary**, **Gemma 4 fallback** on quota exhaustion) and Supabase Postgres (hosted, external). Neither runs inside Docker.
+
+### LLM model selection
+
+All LLM calls (validation + assistant) go through `LLMClient` and use the same model policy:
+
+| Role | Model ID | When used |
+| --- | --- | --- |
+| **Primary** | `gemini-3.5-flash-lite` | Default for every Call #1 and Call #2 |
+| **Fallback** | `gemma-4-31b-it` (Gemma 4) | When the primary model returns quota/rate-limit errors |
+
+The client retries with the fallback model automatically — the orchestration layer does not branch on model choice. Log which model served each call in `llm.jsonl` for cost/debugging.
 
 **Docker's job is narrow on purpose:** it containerizes the frontend and backend only, via Docker Compose, so every developer runs the same JDK/Scala/sbt/Node versions. The database is not part of that boundary — see §2.
 
@@ -23,13 +34,13 @@ flowchart TB
         Auth[Auth Middleware — JWT]
         Filter[Regex Pre-filter]
         Conv[Conversation Orchestration]
-        V1[Gemma Call #1 — validation]
-        V2[Gemma Call #2 — assistant]
+        V1[LLM Call #1 — validation]
+        V2[LLM Call #2 — assistant]
         PP[ProductProvider interface]
     end
 
     subgraph T3["Tier 3 — Data (hosted, external)"]
-        LLM[Gemma 4 — Google AI Studio]
+        LLM[Gemini 3.5 Flash Lite / Gemma 4 fallback]
         SB[(Supabase Postgres)]
     end
 
@@ -119,22 +130,22 @@ Plus the pre-existing catalog/health routes:
 
 **What gets sent to the LLM per turn** is bounded on purpose: `conversation_state.filters` (structured, cheap) + the last **~6–10 raw messages** (not the full transcript) + the latest message. This keeps token cost bounded while still giving the LLM enough raw context to self-correct on ambiguous turns.
 
-## 5. Product retrieval: `ProductProvider`, Gemma never writes SQL
+## 5. Product retrieval: `ProductProvider`, the LLM never writes SQL
 
 Business logic never calls Supabase Postgres directly for product data. It depends only on a `ProductProvider` interface; `SupabaseProductProvider` is the sole concrete implementation today. Swapping providers later (a different store, a cache layer, a vector DB) is a one-file change, not a rewrite — the same reasoning the project already applies to `LLMClient`.
 
 ```
 User message
-  → Gemma: extract structured filters (category, budget, attributes, keywords)
+  → LLM: extract structured filters (category, budget, attributes, keywords)
   → Business Logic
   → ProductProvider.search(filters)   ← interface; SupabaseProductProvider is the only impl
   → Supabase: full-text search + SQL filters → top 30
   → Reranker → top 5
-  → Gemma (optional): format/explain the response
+  → LLM (optional): format/explain the response
   → React
 ```
 
-Gemma's job is understanding language and writing language. It is never asked to produce SQL, and the backend never executes LLM-authored queries — retrieval stays deterministic, debuggable, and safe from injection through the query layer itself.
+The LLM's job is understanding language and writing language. It is never asked to produce SQL, and the backend never executes LLM-authored queries — retrieval stays deterministic, debuggable, and safe from injection through the query layer itself.
 
 ## 6. Prompt validation & security — two-stage pipeline
 
@@ -151,7 +162,8 @@ Regex pre-filter (reject-on-match, never strip-and-continue)
     │        May be recorded in app/security logs only.
     │
     ▼ passes
-Call #1 — Gemma, VALIDATION ONLY (narrow, single-purpose prompt)
+Call #1 — LLM, VALIDATION ONLY (narrow, single-purpose prompt;
+          primary: gemini-3.5-flash-lite, fallback: gemma-4-31b-it on quota errors)
     │
     ├─ safe:false, OR response fails to parse / missing "safe" ─► FAIL CLOSED.
     │        Treat identically to an unsafe result. Reject the turn.
@@ -160,7 +172,8 @@ Call #1 — Gemma, VALIDATION ONLY (narrow, single-purpose prompt)
     │
     ▼ safe:true — ONLY NOW append the user's message to `messages`
     │
-Call #2 — Gemma, ASSISTANT ONLY (extract filters + generate response;
+Call #2 — LLM, ASSISTANT ONLY (extract filters + generate response;
+          same primary/fallback policy as Call #1;
           independently hardened prompt — does NOT relax guardrails just
           because Call #1 passed)
     │
@@ -274,10 +287,10 @@ backend/logs/
                          │  │ (resolve session→  │  │
                          │  │  conversation)      │  │
                          │  ├───────────────────┤  │
-                         │  │ Gemma Call #1       │  │
+                         │  │ LLM Call #1         │  │
                          │  │ (validation)        │  │
                          │  ├───────────────────┤  │
-                         │  │ Gemma Call #2       │  │
+                         │  │ LLM Call #2         │  │
                          │  │ (assistant)         │  │
                          │  ├───────────────────┤  │
                          │  │ ProductProvider     │  │
@@ -335,8 +348,8 @@ LLM_LOGGING=true
 
 ## 10. What stays true throughout
 
-- React talks only to the Scala API. The Scala API is the only thing that talks to Gemma 4 and to Supabase.
+- React talks only to the Scala API. The Scala API is the only thing that talks to Google AI Studio (Gemini/Gemma) and to Supabase.
 - REST + JSON, no WebSockets/SSE required for the MVP.
 - HTTP itself is stateless; conversation memory is durable application state in Supabase (`conversations`, `messages`, `conversation_state`), addressed per-request via `sessionId` → `conversation_id`.
-- Gemma never generates or executes SQL.
+- The LLM never generates or executes SQL.
 - Product schema (`products` table, full-text search, indexes) is unchanged from [`database-schema.md`](database-schema.md).
