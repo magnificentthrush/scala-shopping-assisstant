@@ -1,33 +1,32 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Check, X, Eye, EyeOff } from "lucide-react";
 import { login } from "../../api/auth";
 import { useAuth } from "../../context/AuthContext";
+import { isValidEmail } from "../../utils/validation";
+import BrandLogo from "../../components/BrandLogo/BrandLogo";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
   const { setUser } = useAuth();
 
-  const passwordChecks = [
-    { label: "At least 6 characters", valid: password.length >= 6 },
-    { label: "At least one number", valid: /\d/.test(password) },
-    { label: "At least one uppercase letter", valid: /[A-Z]/.test(password) },
-  ];
-  const showChecklist = password.length > 0;
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
     if (!email || !password) {
       setError("Please fill in both fields.");
       return;
     }
+    if (!isValidEmail(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
     setLoading(true);
     try {
       const result = await login(email, password);
@@ -41,136 +40,63 @@ export default function Login() {
   }
 
   return (
-    <div
-      className="relative flex items-center justify-center min-h-screen px-4 overflow-hidden"
-      style={{
-        background:
-          "radial-gradient(ellipse 80% 60% at 50% 0%, #0d1b3d 0%, #05070f 55%, #000000 100%)",
-      }}
-    >
-      {/* ambient glow accents, no boxes */}
-      <div
-        className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full blur-3xl opacity-30"
-        style={{ background: "radial-gradient(circle, #2b4bff 0%, transparent 70%)" }}
-      />
-      <div
-        className="pointer-events-none absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full blur-3xl opacity-20"
-        style={{ background: "radial-gradient(circle, #1e2a5e 0%, transparent 70%)" }}
-      />
+    <div className="auth-screen">
+      <header className="auth-screen__header">
+        <BrandLogo compact />
+        <Link to="/signup" className="button">Sign up</Link>
+      </header>
 
-      <div className="relative w-full max-w-sm">
-        {/* Brand header */}
-        <div className="flex items-center gap-4 mb-12">
-          <div
-            className="flex items-center justify-center w-16 h-16 rounded-2xl text-3xl font-bold text-white shrink-0"
-            style={{
-              background: "linear-gradient(135deg, #2b4bff 0%, #0f1b4d 100%)",
-              boxShadow: "0 6px 28px rgba(43, 75, 255, 0.5)",
-            }}
-          >
-            S
-          </div>
-          <span
-            className="text-4xl font-extrabold tracking-tight"
-            style={{
-              backgroundImage: "linear-gradient(135deg, #ffffff 0%, #93a8ff 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-            }}
-          >
-            ShopPilot
-          </span>
-        </div>
+      <main className="auth-screen__main">
+        <section className="auth-panel" aria-labelledby="login-title">
+          <h1 id="login-title">Welcome back</h1>
+          <p className="auth-panel__subtitle">Log in to continue with your shopping assistant.</p>
 
-        <h2 className="text-3xl font-semibold text-white mb-2 tracking-tight">
-          Welcome back
-        </h2>
-        <p className="text-base text-slate-400 mb-8">Log in to continue shopping</p>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Email
-            </label>
+          <form onSubmit={handleSubmit} className="auth-form" noValidate>
+            <div className="auth-field">
+              <label htmlFor="login-email">Email address</label>
             <input
+                id="login-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               disabled={loading}
-              className="w-full bg-[#0b1330] border border-slate-700 rounded-xl px-4 py-3 text-base text-white placeholder-slate-600 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-colors disabled:opacity-50"
+                className="auth-input"
+                autoComplete="email"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                disabled={loading}
-                className="w-full bg-[#0b1330] border border-slate-700 rounded-xl px-4 py-3 pr-11 text-base text-white placeholder-slate-600 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-colors disabled:opacity-50"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((s) => !s)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-              </button>
-            </div>
-
-            {showChecklist && (
-              <div className="mt-2.5 space-y-1">
-                {passwordChecks.map((check) => (
-                  <div key={check.label} className="flex items-center gap-1.5 text-xs">
-                    {check.valid ? (
-                      <Check size={13} className="text-emerald-400 shrink-0" />
-                    ) : (
-                      <X size={13} className="text-slate-600 shrink-0" />
-                    )}
-                    <span className={check.valid ? "text-emerald-400" : "text-slate-500"}>
-                      {check.label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="auth-field">
+              <label htmlFor="login-password">Password</label>
+            <input
+                id="login-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              disabled={loading}
+                className="auth-input"
+                autoComplete="current-password"
+            />
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+            {error ? <p className="auth-error" role="alert">{error}</p> : null}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 rounded-full py-3.5 text-base font-medium text-white transition-all disabled:opacity-50"
-            style={{
-              background: "linear-gradient(135deg, #2b4bff 0%, #0f1b4d 100%)",
-              boxShadow: "0 4px 24px rgba(43, 75, 255, 0.35)",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.boxShadow = "0 6px 32px rgba(43, 75, 255, 0.55)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.boxShadow = "0 4px 24px rgba(43, 75, 255, 0.35)")
-            }
+            className="auth-submit"
           >
             {loading ? "Logging in..." : "Log In"}
           </button>
         </form>
 
-        <p className="text-base text-slate-500 mt-6 text-center">
-          Don't have an account?{" "}
-          <Link to="/signup" className="text-white hover:text-blue-400 transition-colors">
-            Sign up
-          </Link>
-        </p>
-      </div>
+          <p className="auth-switch">
+            Don&apos;t have an account? <Link to="/signup">Sign up</Link>
+          </p>
+        </section>
+      </main>
+
+      <footer className="auth-screen__footer">ShopPilot · Product discovery, simplified.</footer>
     </div>
   );
 }

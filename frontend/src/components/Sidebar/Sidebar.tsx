@@ -1,8 +1,18 @@
-// Left sidebar — dark blue/black ShopPilot theme, with Settings at the bottom
-
 import { useState, useEffect, useRef } from "react";
-import { Plus, Pencil, Trash2, Check, X, Search, MessageSquare, MoreVertical, Settings as SettingsIcon } from "lucide-react";
+import {
+  Check,
+  MoreHorizontal,
+  PanelLeftClose,
+  Pencil,
+  Search,
+  Settings,
+  SquarePen,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { ConversationSummary } from "../../types";
+import BrandLogo from "../BrandLogo/BrandLogo";
+import { useAuth } from "../../context/AuthContext";
 import {
   listConversations,
   renameConversation,
@@ -15,6 +25,8 @@ interface SidebarProps {
   onNewChat: () => void;
   refreshKey: number;
   onOpenSettings: () => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 export default function Sidebar({
@@ -23,7 +35,10 @@ export default function Sidebar({
   onNewChat,
   refreshKey,
   onOpenSettings,
+  isOpen,
+  onClose,
 }: SidebarProps) {
+  const { user } = useAuth();
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -83,125 +98,126 @@ export default function Sidebar({
     (c.title || "New chat").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  return (
-    <div
-      className="w-72 h-screen flex flex-col border-r border-slate-800/60"
-      style={{ background: "#05070f" }}
-    >
-      {/* Brand header */}
-      <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
-        <div
-          className="flex items-center justify-center w-8 h-8 rounded-lg text-sm font-bold text-white shrink-0"
-          style={{
-            background: "linear-gradient(135deg, #2b4bff 0%, #0f1b4d 100%)",
-            boxShadow: "0 4px 16px rgba(43, 75, 255, 0.4)",
-          }}
-        >
-          S
-        </div>
-        <span
-          className="text-lg font-extrabold tracking-tight"
-          style={{
-            backgroundImage: "linear-gradient(135deg, #ffffff 0%, #93a8ff 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-          }}
-        >
-          ShopPilot
-        </span>
-      </div>
+  const initials = user?.fullName
+    ? user.fullName
+        .trim()
+        .split(" ")
+        .map((part) => part[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "SP";
 
-      <div className="px-3 pb-2">
-        <button
-          onClick={onNewChat}
-          className="w-full flex items-center justify-center gap-2 bg-white text-[#05070f] hover:bg-slate-200 text-sm font-semibold rounded-xl px-3 py-2.5 transition-colors"
-        >
-          <Plus size={16} />
-          New Chat
+  return (
+    <aside className={`sidebar ${isOpen ? "sidebar--open" : ""}`} aria-label="Conversation sidebar">
+      <div className="sidebar__header">
+        <div className="sidebar__brand">
+          <BrandLogo compact />
+        </div>
+        <button type="button" className="icon-button sidebar__close" onClick={onClose} aria-label="Close sidebar">
+          <PanelLeftClose size={19} strokeWidth={1.7} />
         </button>
       </div>
 
-      <div className="px-3 pb-3">
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+      <div className="sidebar__actions">
+        <button type="button" onClick={onNewChat} className="sidebar__new-chat">
+          <span className="sidebar__new-chat-label">
+            <SquarePen size={18} strokeWidth={1.7} />
+            New chat
+          </span>
+        </button>
+      </div>
+
+      <div className="sidebar__search-wrap">
+        <div className="sidebar__search">
+          <Search size={15} strokeWidth={1.7} aria-hidden="true" />
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search chats..."
-            className="w-full bg-[#0b1330] border border-slate-800 text-sm text-white placeholder-slate-500 rounded-lg pl-8 pr-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/40 transition-colors"
+            placeholder="Search chats"
+            aria-label="Search conversations"
           />
         </div>
       </div>
 
-      <div className="border-t border-slate-800/60 mx-3" />
+      <div className="sidebar__section-label">Chats</div>
 
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+      <div className="sidebar__list">
         {filteredConversations.length === 0 && (
-          <p className="text-sm text-slate-500 italic text-center py-6">No chats.</p>
+          <p className="sidebar__empty">No conversations found</p>
         )}
 
         {filteredConversations.map((convo) => (
           <div
             key={convo.id}
-            className={`group relative flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer text-sm transition-colors ${
-              convo.id === activeConversationId ? "bg-[#12204a]" : "hover:bg-[#0b1330]"
-            }`}
+            className={`conversation-row ${
+              convo.id === activeConversationId ? "conversation-row--active" : ""
+            } ${menuOpenId === convo.id ? "conversation-row--menu" : ""}`}
           >
-            <MessageSquare size={14} className="text-slate-500 shrink-0" />
-
             {editingId === convo.id ? (
-              <>
+              <div className="conversation-row__edit">
                 <input
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && saveEdit(convo.id)}
                   autoFocus
-                  className="flex-1 bg-[#12204a] text-white text-sm rounded px-2 py-1 outline-none"
+                  aria-label="Conversation title"
                 />
-                <button onClick={() => saveEdit(convo.id)} className="text-green-400 hover:text-green-300">
-                  <Check size={14} />
+                <button
+                  type="button"
+                  onClick={() => saveEdit(convo.id)}
+                  className="icon-button"
+                  aria-label="Save title"
+                >
+                  <Check size={15} strokeWidth={1.8} />
                 </button>
-                <button onClick={() => setEditingId(null)} className="text-slate-500 hover:text-white">
-                  <X size={14} />
+                <button
+                  type="button"
+                  onClick={() => setEditingId(null)}
+                  className="icon-button"
+                  aria-label="Cancel editing"
+                >
+                  <X size={15} strokeWidth={1.8} />
                 </button>
-              </>
+              </div>
             ) : (
               <>
-                <span onClick={() => onSelectConversation(convo.id)} className="flex-1 truncate text-slate-200">
+                <button
+                  type="button"
+                  onClick={() => onSelectConversation(convo.id)}
+                  className="conversation-row__select"
+                >
                   {convo.title || "New chat"}
-                </span>
+                </button>
 
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setMenuOpenId(menuOpenId === convo.id ? null : convo.id);
                   }}
-                  className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-white transition-opacity shrink-0"
+                  className="icon-button conversation-row__menu-trigger"
+                  aria-label={`Actions for ${convo.title || "New chat"}`}
+                  aria-expanded={menuOpenId === convo.id}
                 >
-                  <MoreVertical size={15} />
+                  <MoreHorizontal size={17} strokeWidth={1.8} />
                 </button>
 
                 {menuOpenId === convo.id && (
-                  <div
-                    ref={menuRef}
-                    className="absolute right-2 top-10 z-20 bg-[#0b1330] border border-slate-800 rounded-lg shadow-lg py-1 w-32"
-                  >
-                    <button
-                      onClick={() => startEdit(convo)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-[#12204a] transition-colors"
-                    >
-                      <Pencil size={13} />
-                      Edit
+                  <div ref={menuRef} className="popover-menu">
+                    <button type="button" onClick={() => startEdit(convo)}>
+                      <Pencil size={15} strokeWidth={1.7} />
+                      Rename
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         setDeletingId(convo.id);
                         setMenuOpenId(null);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-[#12204a] transition-colors"
+                      className="popover-menu__danger"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={15} strokeWidth={1.7} />
                       Delete
                     </button>
                   </div>
@@ -212,39 +228,41 @@ export default function Sidebar({
         ))}
       </div>
 
-      {/* Settings button at the bottom */}
-      <div className="border-t border-slate-800/60 p-3">
-        <button
-          onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-[#0b1330] hover:text-white transition-colors"
-        >
-          <SettingsIcon size={16} />
-          Settings
+      <div className="sidebar__footer">
+        <button type="button" onClick={onOpenSettings} className="sidebar__settings">
+          <span className="mini-avatar" aria-hidden="true">{initials}</span>
+          <span className="sidebar__settings-copy">
+            <span>{user?.fullName || "ShopPilot user"}</span>
+            <small>{user?.email || "Open settings"}</small>
+          </span>
+          <Settings size={16} strokeWidth={1.7} aria-hidden="true" />
         </button>
       </div>
 
       {deletingId && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-[#0b1330] text-white rounded-xl p-5 w-80 border border-slate-800">
-            <h3 className="font-semibold mb-2">Delete this chat?</h3>
-            <p className="text-sm text-slate-400 mb-4">This action cannot be undone.</p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setDeletingId(null)}
-                className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-[#12204a]"
-              >
+        <div className="dialog-backdrop" role="presentation">
+          <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title">
+            <div className="dialog__header">
+              <h3 id="delete-dialog-title">Delete this chat?</h3>
+            </div>
+            <div className="dialog__body">
+              <p className="dialog__description">This action cannot be undone.</p>
+              <div className="dialog__actions">
+                <button type="button" onClick={() => setDeletingId(null)} className="button">
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() => confirmDelete(deletingId)}
-                className="px-3 py-1.5 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700"
+                className="button button--primary button--danger"
               >
                 Delete
               </button>
+              </div>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </aside>
   );
 }

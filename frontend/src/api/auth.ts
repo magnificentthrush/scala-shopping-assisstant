@@ -1,102 +1,94 @@
-// Handles registration, login, logout, and JWT storage.
-// Mocked for now — remembers names by email so login shows the correct name.
+// Authentication against our own backend (see docs/authentication.md).
+// USE_MOCK_API mirrors the pattern in api/conversations.ts: while the Scala
+// backend's /api/auth/* endpoints don't exist yet, auth is simulated entirely
+// in localStorage so signup/login keep working end-to-end in the browser.
 
 import { apiFetch } from "./client";
-import type { AuthResponse, User } from "../types";
+import type { User } from "../types";
 
 const USE_MOCK_API = true;
 
-// Mock "database" — remembers which name goes with which email during this session
-const mockUserDirectory: Record<string, string> = {};
+const MOCK_USERS_KEY = "mock_users";
 
-function mockDelay<T>(value: T, ms = 600): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
+interface MockUser {
+  id: string;
+  fullName: string;
+  email: string;
+  password: string;
 }
 
-// Turns "ada.lovelace@example.com" into "Ada.lovelace" as a last-resort display name
-function nameFromEmail(email: string): string {
-  const localPart = email.split("@")[0];
-  return localPart.charAt(0).toUpperCase() + localPart.slice(1);
+function loadMockUsers(): MockUser[] {
+  const raw = localStorage.getItem(MOCK_USERS_KEY);
+  return raw ? JSON.parse(raw) : [];
 }
 
-export async function register(
-  fullName: string,
-  email: string,
-  password: string
-): Promise<AuthResponse> {
+function saveMockUsers(users: MockUser[]) {
+  localStorage.setItem(MOCK_USERS_KEY, JSON.stringify(users));
+}
+
+function toUser(mockUser: MockUser): User {
+  return { id: mockUser.id, fullName: mockUser.fullName, email: mockUser.email };
+}
+
+export async function register(fullName: string, email: string, password: string) {
   if (USE_MOCK_API) {
-    if (email === "taken@example.com") {
-      return Promise.reject({ status: 409, code: "EMAIL_TAKEN", message: "Email already registered" });
+    const users = loadMockUsers();
+    if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
+      throw new Error("An account with this email already exists. Please log in instead.");
     }
-    mockUserDirectory[email] = fullName; // remember this name for future logins
 
-    const mockResponse: AuthResponse = {
-      user: { id: crypto.randomUUID(), fullName, email },
-      token: "mock-jwt-" + crypto.randomUUID(),
-    };
-    const result = await mockDelay(mockResponse);
-    saveAuth(result);
-    return result;
+    const mockUser: MockUser = { id: crypto.randomUUID(), fullName, email, password };
+    users.push(mockUser);
+    saveMockUsers(users);
+
+    return { user: toUser(mockUser), needsVerification: true };
   }
 
-  const result = await apiFetch<AuthResponse>("/api/auth/register", {
+  const data = await apiFetch<{ user: User; token: string }>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify({ fullName, email, password }),
   });
-  saveAuth(result);
-  return result;
+  saveAuth(data.user, data.token);
+  return { user: data.user, needsVerification: false };
 }
 
-export async function login(
-  email: string,
-  password: string
-): Promise<AuthResponse> {
+export async function login(email: string, password: string) {
   if (USE_MOCK_API) {
-    if (password === "wrong") {
-      return Promise.reject({ status: 401, code: "INVALID_CREDENTIALS", message: "Invalid email or password" });
+    const users = loadMockUsers();
+    const mockUser = users.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+    );
+    if (!mockUser) {
+      throw new Error("Invalid email or password.");
     }
 
-    // Use the name from a previous signup if we have one, otherwise derive from email
-    const fullName = mockUserDirectory[email] || nameFromEmail(email);
-
-    const mockResponse: AuthResponse = {
-      user: { id: crypto.randomUUID(), fullName, email },
-      token: "mock-jwt-" + crypto.randomUUID(),
-    };
-    const result = await mockDelay(mockResponse);
-    saveAuth(result);
-    return result;
+    const user = toUser(mockUser);
+    const token = `mock-token-${mockUser.id}`;
+    saveAuth(user, token);
+    return { user, token };
   }
 
-  const result = await apiFetch<AuthResponse>("/api/auth/login", {
+  const data = await apiFetch<{ user: User; token: string }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
-  saveAuth(result);
-  return result;
+  saveAuth(data.user, data.token);
+  return { user: data.user, token: data.token };
 }
 
-export function logout(): void {
+export async function logout() {
   localStorage.removeItem("token");
   localStorage.removeItem("user");
 }
 
-function saveAuth(auth: AuthResponse) {
-  localStorage.setItem("token", auth.token);
-  localStorage.setItem("user", JSON.stringify(auth.user));
+function saveAuth(user: User, token: string) {
+  localStorage.setItem("token", token);
+  localStorage.setItem("user", JSON.stringify(user));
 }
 
 export function getStoredUser(): User | null {
   const raw = localStorage.getItem("user");
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as User;
-  } catch {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
-    return null;
-  }
+  return raw ? JSON.parse(raw) : null;
 }
 
 export function getStoredToken(): string | null {
@@ -105,4 +97,8 @@ export function getStoredToken(): string | null {
 
 export function isAuthenticated(): boolean {
   return !!getStoredToken();
+}
+
+export async function restoreSession(): Promise<User | null> {
+  return getStoredUser();
 }
