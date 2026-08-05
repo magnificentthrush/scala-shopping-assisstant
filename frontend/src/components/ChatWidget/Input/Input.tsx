@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Plus, Paperclip, Image as ImageIcon } from "lucide-react";
+import { ArrowUp, File, Image as ImageIcon, Paperclip, Plus } from "lucide-react";
+import figmaCloseIcon from "../../../assets/figma-icons/header-edit.svg";
 
 interface InputProps {
   value: string;
@@ -42,44 +43,46 @@ export default function Input({ value, onChange, onSend, disabled }: InputProps)
     setAttachedFile(null);
   }
 
+  const canSend = Boolean(value.trim() || attachedFile);
+
   return (
-    <div className="px-6 pb-6 pt-2">
-      <div className="max-w-2xl mx-auto">
+    <div className="composer-shell">
+      <div className="composer">
         {attachedFile && (
-          <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg px-3 py-1.5 mb-2 text-xs text-[var(--text-primary)]">
-            <span className="truncate">📎 {attachedFile.name}</span>
-            <button onClick={() => setAttachedFile(null)} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] ml-2">
-              ✕
+          <div className="attachment-chip">
+            <File size={15} strokeWidth={1.7} aria-hidden="true" />
+            <span>{attachedFile.name}</span>
+            <button
+              type="button"
+              onClick={() => setAttachedFile(null)}
+              className="icon-button"
+              aria-label="Remove attachment"
+            >
+              <img src={figmaCloseIcon} alt="" className="figma-icon" />
             </button>
           </div>
         )}
 
-        <div className="relative flex items-center gap-2 bg-[var(--bg-surface)] rounded-full pl-2 pr-2 py-2 border border-[var(--border-color)]">
+        <div className="composer__box">
           <button
+            type="button"
             onClick={() => setMenuOpen((open) => !open)}
             disabled={disabled}
-            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-full hover:bg-[var(--bg-surface-alt)] transition-colors shrink-0 disabled:opacity-50"
+            className="icon-button"
+            aria-label="Add an attachment"
+            aria-expanded={menuOpen}
           >
-            <Plus size={18} />
+            <Plus size={19} strokeWidth={1.7} />
           </button>
 
           {menuOpen && (
-            <div
-              ref={menuRef}
-              className="absolute bottom-12 left-0 z-20 bg-[var(--bg-surface-alt)] border border-[var(--border-color)] rounded-xl shadow-lg py-1 w-52"
-            >
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors"
-              >
-                <Paperclip size={15} />
+            <div ref={menuRef} className="composer__menu">
+              <button type="button" onClick={() => fileInputRef.current?.click()}>
+                <Paperclip size={17} strokeWidth={1.7} />
                 Add files
               </button>
-              <button
-                onClick={() => imageInputRef.current?.click()}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors"
-              >
-                <ImageIcon size={15} />
+              <button type="button" onClick={() => imageInputRef.current?.click()}>
+                <ImageIcon size={17} strokeWidth={1.7} />
                 Add photos
               </button>
             </div>
@@ -94,17 +97,21 @@ export default function Input({ value, onChange, onSend, disabled }: InputProps)
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={disabled}
-            placeholder="e.g. waterproof running shoes under $100..."
-            className="flex-1 bg-transparent text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)] outline-none disabled:opacity-50"
+            placeholder="Ask ShopPilot"
+            className="composer__input"
+            aria-label="Message ShopPilot"
           />
           <button
+            type="button"
             onClick={handleSendClick}
-            disabled={disabled}
-            className="bg-[var(--btn-bg)] text-[var(--btn-text)] hover:bg-[var(--btn-bg-hover)] rounded-full p-2 disabled:opacity-50 transition-colors shrink-0"
+            disabled={disabled || !canSend}
+            className="composer__send"
+            aria-label="Send message"
           >
-            <Send size={16} />
+            <ArrowUp size={18} strokeWidth={2} />
           </button>
         </div>
+        <p className="composer__fine-print">ShopPilot can make mistakes. Check important product details.</p>
       </div>
     </div>
   );

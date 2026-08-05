@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { ChevronDown, Menu } from "lucide-react";
 import Sidebar from "../../components/Sidebar/Sidebar";
 import ChatWidget from "../../components/ChatWidget/ChatWidget";
 import ProfileAvatar from "../../components/Navbar/Navbar";
@@ -11,6 +12,7 @@ export default function Chat() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const hasInitialized = useRef(false);
 
@@ -34,33 +36,69 @@ export default function Chat() {
     setConversationId(res.conversationId);
     setSessionId(res.sessionId);
     setSidebarRefreshKey((k) => k + 1);
+    setSidebarOpen(false);
   }
 
   async function handleSelectConversation(id: string) {
     const res = await resumeConversation(id);
     setConversationId(res.conversationId);
     setSessionId(res.sessionId);
+    setSidebarOpen(false);
   }
 
   if (!conversationId || !sessionId) {
-    return <div className="p-6 text-[var(--text-secondary)] bg-[var(--bg-app)] min-h-screen">Loading...</div>;
+    return (
+      <div className="app-loading" role="status" aria-label="Loading your conversations">
+        <div className="app-loading__content">
+          <div className="app-loading__dot" />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex relative">
+    <div className="app-shell">
       <Sidebar
         activeConversationId={conversationId}
         onSelectConversation={handleSelectConversation}
         onNewChat={handleNewChat}
         refreshKey={sidebarRefreshKey}
         onOpenSettings={() => setSettingsOpen(true)}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
-      <ProfileAvatar onOpenSettings={() => setSettingsOpen(true)} />
-      <ChatWidget
-        conversationId={conversationId}
-        sessionId={sessionId}
-        onFirstMessageSent={() => setSidebarRefreshKey((k) => k + 1)}
+      <button
+        type="button"
+        className={`sidebar-backdrop ${sidebarOpen ? "sidebar-backdrop--open" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+        aria-label="Close conversation sidebar"
       />
+
+      <main className="app-main">
+        <header className="app-topbar">
+          <div className="app-topbar__left">
+            <button
+              type="button"
+              className="icon-button mobile-menu-button"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open conversation sidebar"
+            >
+              <Menu size={20} strokeWidth={1.8} />
+            </button>
+            <div className="app-title-button" aria-label="Current assistant">
+              ShopPilot
+              <ChevronDown size={15} strokeWidth={1.8} aria-hidden="true" />
+            </div>
+          </div>
+          <ProfileAvatar onOpenSettings={() => setSettingsOpen(true)} />
+        </header>
+
+        <ChatWidget
+          conversationId={conversationId}
+          sessionId={sessionId}
+          onFirstMessageSent={() => setSidebarRefreshKey((k) => k + 1)}
+        />
+      </main>
       {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
     </div>
   );
