@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="sbt: io.undertow:undertow-core:2.3.10.Final:jar" type="java-imported" external-system-id="SBT">
+    <properties groupId="io.undertow" artifactId="undertow-core" version="2.3.10.Final" baseVersion="2.3.10.Final" />
+    <CLASSES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/io/undertow/undertow-core/2.3.10.Final/undertow-core-2.3.10.Final.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/io/undertow/undertow-core/2.3.10.Final/undertow-core-2.3.10.Final-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

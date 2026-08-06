@@ -1,58 +1,118 @@
-// Chat input — compact composer for shopping requests
-
-import { Send } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { ArrowUp, File, Image as ImageIcon, Paperclip, Plus } from "lucide-react";
+import figmaCloseIcon from "../../../assets/figma-icons/header-edit.svg";
 
 interface InputProps {
   value: string;
   onChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (file: File | null) => void;
   disabled?: boolean;
 }
 
 export default function Input({ value, onChange, onSend, disabled }: InputProps) {
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && !disabled) {
-      e.preventDefault();
-      onSend();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+
+  const menuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
     }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && !disabled) handleSendClick();
   }
 
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) setAttachedFile(file);
+    setMenuOpen(false);
+    e.target.value = "";
+  }
+
+  function handleSendClick() {
+    onSend(attachedFile);
+    setAttachedFile(null);
+  }
+
+  const canSend = Boolean(value.trim() || attachedFile);
+
   return (
-    <div className="px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 sm:px-6 sm:pb-6">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSend();
-        }}
-        className="mx-auto max-w-3xl"
-      >
-        <div className="relative flex items-center gap-2 rounded-2xl border border-gray-700 bg-[#242424] p-2 shadow-xl shadow-black/20 transition-[border-color,box-shadow] hover:border-gray-600 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
-          <label htmlFor="chat-message" className="sr-only">Message ShopPilot</label>
+    <div className="composer-shell">
+      <div className="composer">
+        {attachedFile && (
+          <div className="attachment-chip">
+            <File size={15} strokeWidth={1.7} aria-hidden="true" />
+            <span>{attachedFile.name}</span>
+            <button
+              type="button"
+              onClick={() => setAttachedFile(null)}
+              className="icon-button"
+              aria-label="Remove attachment"
+            >
+              <img src={figmaCloseIcon} alt="" className="figma-icon" />
+            </button>
+          </div>
+        )}
+
+        <div className="composer__box">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((open) => !open)}
+            disabled={disabled}
+            className="icon-button"
+            aria-label="Add an attachment"
+            aria-expanded={menuOpen}
+          >
+            <Plus size={19} strokeWidth={1.7} />
+          </button>
+
+          {menuOpen && (
+            <div ref={menuRef} className="composer__menu">
+              <button type="button" onClick={() => fileInputRef.current?.click()}>
+                <Paperclip size={17} strokeWidth={1.7} />
+                Add files
+              </button>
+              <button type="button" onClick={() => imageInputRef.current?.click()}>
+                <ImageIcon size={17} strokeWidth={1.7} />
+                Add photos
+              </button>
+            </div>
+          )}
+
+          <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
+          <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelected} />
+
           <input
-            id="chat-message"
-            name="message"
             type="text"
-            autoComplete="off"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={disabled}
-            placeholder="Describe what you’re shopping for…"
-            className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-gray-100 placeholder-gray-500 outline-none disabled:opacity-50"
+            placeholder="Ask ShopPilot"
+            className="composer__input"
+            aria-label="Message ShopPilot"
           />
           <button
-            type="submit"
+            type="button"
+            onClick={handleSendClick}
+            disabled={disabled || !canSend}
+            className="composer__send"
             aria-label="Send message"
-            disabled={disabled || !value.trim()}
-            className="shrink-0 rounded-xl bg-blue-600 p-2.5 text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:bg-gray-700 disabled:text-gray-500 disabled:opacity-70"
           >
-            <Send aria-hidden="true" size={16} />
+            <ArrowUp size={18} strokeWidth={2} />
           </button>
         </div>
-        <p className="mt-2 hidden text-center text-xs text-gray-600 sm:block">
-          ShopPilot can make mistakes. Confirm product details before purchasing.
-        </p>
-      </form>
+        <p className="composer__fine-print">ShopPilot can make mistakes. Check important product details.</p>
+      </div>
     </div>
   );
 }

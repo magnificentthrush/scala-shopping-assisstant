@@ -1,20 +1,25 @@
-// Signup page — connects to the auth API (mocked for now, see api/auth.ts)
-
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { LoaderCircle, ShoppingBag } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Check, X, Eye, EyeOff } from "lucide-react";
 import { register } from "../../api/auth";
-import { useAuth } from "../../context/AuthContext";
+import { isValidEmail, isValidPassword } from "../../utils/validation";
+import BrandLogo from "../../components/BrandLogo/BrandLogo";
 
 export default function Signup() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
 
-  const navigate = useNavigate();
-  const { setUser } = useAuth();
+  const passwordChecks = [
+    { label: "At least 6 characters", valid: password.length >= 6 },
+    { label: "At least one number", valid: /\d/.test(password) },
+    { label: "At least one uppercase letter", valid: /[A-Z]/.test(password) },
+  ];
+  const showChecklist = password.length > 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,16 +29,20 @@ export default function Signup() {
       setError("Please fill in all fields.");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (!isValidEmail(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    const passwordCheck = isValidPassword(password);
+    if (!passwordCheck.valid) {
+      setError(passwordCheck.message!);
       return;
     }
 
     setLoading(true);
     try {
-      const result = await register(name, email, password);
-      setUser(result.user);
-      navigate("/");
+      await register(name, email, password);
+      setSubmittedEmail(email);
     } catch (err: any) {
       setError(err.message || "Signup failed. Please try again.");
     } finally {
@@ -41,109 +50,127 @@ export default function Signup() {
     }
   }
 
-  return (
-    <div className="flex min-h-dvh items-center justify-center bg-[#0e0e0e] px-4 py-10">
-      <section
-        aria-labelledby="signup-title"
-        className="w-full max-w-md rounded-2xl border border-white/10 bg-[#171717] p-6 shadow-2xl shadow-black/30 sm:p-8"
-      >
-        <div className="mb-7 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-950/40">
-          <ShoppingBag aria-hidden="true" size={21} />
-        </div>
-        <h1 id="signup-title" className="text-pretty text-2xl font-bold tracking-tight text-white">
-          Create an Account
-        </h1>
-        <p className="mt-1 text-sm text-gray-400">Sign up to start shopping smarter.</p>
+  if (submittedEmail) {
+    return (
+      <div className="auth-screen">
+        <header className="auth-screen__header">
+          <BrandLogo compact />
+          <Link to="/login" className="button">Log in</Link>
+        </header>
+        <main className="auth-screen__main">
+          <section className="auth-panel auth-panel--centered" aria-labelledby="check-email-title">
+            <div className="auth-panel__mark" aria-hidden="true">
+              <Check size={21} strokeWidth={1.8} />
+            </div>
+            <h1 id="check-email-title">Check your email</h1>
+            <p className="auth-panel__subtitle">
+              We sent a verification link to <strong>{submittedEmail}</strong>. Open it to activate
+              your account, then log in.
+            </p>
+            <Link to="/login" className="button button--primary">Back to login</Link>
+          </section>
+        </main>
+        <footer className="auth-screen__footer">You can close this page after verifying your email.</footer>
+      </div>
+    );
+  }
 
-        <form onSubmit={handleSubmit} className="mt-7 space-y-5">
-          <div>
-            <label htmlFor="signup-name" className="mb-1.5 block text-sm font-medium text-gray-200">
-              Full Name
-            </label>
+  return (
+    <div className="auth-screen">
+      <header className="auth-screen__header">
+        <BrandLogo compact />
+        <Link to="/login" className="button">Log in</Link>
+      </header>
+
+      <main className="auth-screen__main">
+        <section className="auth-panel" aria-labelledby="signup-title">
+          <h1 id="signup-title">Create your account</h1>
+          <p className="auth-panel__subtitle">Start finding better products with ShopPilot.</p>
+
+          <form onSubmit={handleSubmit} className="auth-form" noValidate>
+            <div className="auth-field">
+              <label htmlFor="signup-name">Full name</label>
             <input
-              id="signup-name"
-              name="name"
+                id="signup-name"
               type="text"
-              autoComplete="name"
-              required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Jane Doe…"
+              placeholder="Jane Doe"
               disabled={loading}
-              aria-describedby={error ? "signup-error" : undefined}
-              className="w-full rounded-xl border border-white/10 bg-[#222] px-3.5 py-3 text-sm text-white placeholder:text-gray-600 hover:border-white/20 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:opacity-50"
+                className="auth-input"
+                autoComplete="name"
             />
           </div>
-
-          <div>
-            <label htmlFor="signup-email" className="mb-1.5 block text-sm font-medium text-gray-200">
-              Email
-            </label>
+            <div className="auth-field">
+              <label htmlFor="signup-email">Email address</label>
             <input
-              id="signup-email"
-              name="email"
+                id="signup-email"
               type="email"
-              autoComplete="email"
-              spellCheck={false}
-              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com…"
+              placeholder="you@example.com"
               disabled={loading}
-              aria-describedby={error ? "signup-error" : undefined}
-              className="w-full rounded-xl border border-white/10 bg-[#222] px-3.5 py-3 text-sm text-white placeholder:text-gray-600 hover:border-white/20 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:opacity-50"
+                className="auth-input"
+                autoComplete="email"
             />
           </div>
+            <div className="auth-field">
+              <label htmlFor="signup-password">Password</label>
+              <div className="auth-input-wrap">
+              <input
+                  id="signup-password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                disabled={loading}
+                  className="auth-input auth-input--with-action"
+                  autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                  className="icon-button auth-input-action"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                  {showPassword ? <EyeOff size={17} strokeWidth={1.7} /> : <Eye size={17} strokeWidth={1.7} />}
+              </button>
+            </div>
 
-          <div>
-            <label htmlFor="signup-password" className="mb-1.5 block text-sm font-medium text-gray-200">
-              Password
-            </label>
-            <input
-              id="signup-password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              minLength={6}
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters…"
-              disabled={loading}
-              aria-describedby={error ? "signup-error" : "password-help"}
-              className="w-full rounded-xl border border-white/10 bg-[#222] px-3.5 py-3 text-sm text-white placeholder:text-gray-600 hover:border-white/20 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:opacity-50"
-            />
-            <p id="password-help" className="mt-1.5 text-xs text-gray-500">
-              Use at least 6 characters.
-            </p>
+            {showChecklist && (
+              <div className="auth-checklist">
+                {passwordChecks.map((check) => (
+                    <div key={check.label} className={`auth-check ${check.valid ? "auth-check--valid" : ""}`}>
+                    {check.valid ? (
+                        <Check size={13} aria-hidden="true" />
+                    ) : (
+                        <X size={13} aria-hidden="true" />
+                    )}
+                    <span>{check.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {error && (
-            <p id="signup-error" role="alert" aria-live="polite" className="rounded-lg bg-red-950/50 px-3 py-2 text-sm text-red-300">
-              {error}
-            </p>
-          )}
+            {error ? <p className="auth-error" role="alert">{error}</p> : null}
 
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/30 transition-[background-color,box-shadow] hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#171717] disabled:opacity-60"
+            className="auth-submit"
           >
-            {loading && <LoaderCircle aria-hidden="true" size={16} className="animate-spin" />}
-            {loading ? "Creating Account…" : "Create Account"}
+            {loading ? "Creating account..." : "Sign Up"}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-400">
-          Already have an account?{" "}
-          <Link
-            to="/login"
-            className="font-medium text-blue-400 underline-offset-4 hover:text-blue-300 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-          >
-            Log In
-          </Link>
-        </p>
-      </section>
+          <p className="auth-switch">
+            Already have an account? <Link to="/login">Log in</Link>
+          </p>
+        </section>
+      </main>
+
+      <footer className="auth-screen__footer">By continuing, you agree to use ShopPilot responsibly.</footer>
     </div>
   );
 }

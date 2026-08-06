@@ -56,3 +56,10 @@ export interface AssistantReply {
   products: Product[];           // Product recommendations, if available
   followUpQuestion?: string;     // Optional follow-up question from the assistant
 }
+
+export interface User {
+  id: string;
+  fullName: string;
+  email: string;
+  avatarUrl?: string;
+}
