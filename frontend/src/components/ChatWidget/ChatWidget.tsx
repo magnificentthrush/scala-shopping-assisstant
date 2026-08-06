@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Copy, RefreshCcw, ShoppingBag, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
+import { Pencil, ShoppingBag } from "lucide-react";
 import type { Message } from "../../types";
 import ProductCard from "../ProductCard/ProductCard";
 import Input from "./Input/Input";
@@ -20,6 +20,8 @@ export default function ChatWidget({ conversationId, sessionId, onFirstMessageSe
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,8 +60,13 @@ export default function ChatWidget({ conversationId, sessionId, onFirstMessageSe
     setInput("");
     setLoading(true);
 
+    await sendAndAppendReply(optimisticUserMessage.content, wasFirstMessage);
+  }
+
+  // Shared logic used both for a fresh send and for re-sending an edited message
+  async function sendAndAppendReply(content: string, wasFirstMessage: boolean) {
     try {
-      const res = await sendMessage(sessionId, conversationId, optimisticUserMessage.content);
+      const res = await sendMessage(sessionId, conversationId, content);
       setMessages((prev) => [
         ...prev,
         {
@@ -89,6 +96,33 @@ export default function ChatWidget({ conversationId, sessionId, onFirstMessageSe
     }
   }
 
+  function startEditingMessage(msg: ChatMessage) {
+    setEditingMessageId(msg.id);
+    setEditText(msg.content);
+  }
+
+  function cancelEditing() {
+    setEditingMessageId(null);
+    setEditText("");
+  }
+
+  // Editing a message removes everything after it (since the conversation forks
+  // from that point) and re-sends the edited text as a new turn.
+  async function saveEditedMessage(msg: ChatMessage) {
+    if (!editText.trim() || loading) return;
+
+    const msgIndex = messages.findIndex((m) => m.id === msg.id);
+    const updatedMessage: ChatMessage = { ...msg, content: editText.trim() };
+    const truncatedHistory = messages.slice(0, msgIndex);
+
+    setMessages([...truncatedHistory, updatedMessage]);
+    setEditingMessageId(null);
+    setEditText("");
+    setLoading(true);
+
+    await sendAndAppendReply(updatedMessage.content, truncatedHistory.length === 0);
+  }
+
   const isEmpty = messages.length === 0;
 
   return (
@@ -116,39 +150,53 @@ export default function ChatWidget({ conversationId, sessionId, onFirstMessageSe
                       <img src={msg.attachedImageUrl} alt="Attached preview" className="message__attachment" />
                     ) : null}
 
-                    {msg.content ? <div className="message__bubble">{msg.content}</div> : null}
+                    {editingMessageId === msg.id ? (
+                      // Edit mode — textarea + Save/Cancel
+                      <div className="message__edit">
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          autoFocus
+                          rows={2}
+                        />
+                        <div className="message__edit-actions">
+                          <button type="button" className="button" onClick={cancelEditing}>
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--primary"
+                            onClick={() => saveEditedMessage(msg)}
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {msg.content ? <div className="message__bubble">{msg.content}</div> : null}
+
+                        {msg.role === "user" ? (
+                          <div className="message-actions" aria-label="Message actions">
+                            <button
+                              type="button"
+                              className="icon-button"
+                              onClick={() => startEditingMessage(msg)}
+                              aria-label="Edit message"
+                              title="Edit"
+                            >
+                              <Pencil size={14} strokeWidth={1.6} />
+                            </button>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
 
                     {msg.products && msg.products.length > 0 ? (
                       <div className="product-rail" aria-label="Recommended products">
                         {msg.products.map((product) => (
                           <ProductCard key={product.id} product={product} />
                         ))}
-                      </div>
-                    ) : null}
-
-                    {msg.role === "assistant" ? (
-                      <div className="message-actions" aria-label="Message actions">
-                        <button
-                          type="button"
-                          className="icon-button"
-                          onClick={() => navigator.clipboard?.writeText(msg.content)}
-                          aria-label="Copy response"
-                          title="Copy"
-                        >
-                          <Copy size={15} strokeWidth={1.6} />
-                        </button>
-                        <button type="button" className="icon-button" aria-label="Good response" title="Good response">
-                          <ThumbsUp size={15} strokeWidth={1.6} />
-                        </button>
-                        <button type="button" className="icon-button" aria-label="Bad response" title="Bad response">
-                          <ThumbsDown size={15} strokeWidth={1.6} />
-                        </button>
-                        <button type="button" className="icon-button" aria-label="Read aloud" title="Read aloud">
-                          <Volume2 size={15} strokeWidth={1.6} />
-                        </button>
-                        <button type="button" className="icon-button" aria-label="Regenerate response" title="Regenerate">
-                          <RefreshCcw size={15} strokeWidth={1.6} />
-                        </button>
                       </div>
                     ) : null}
                   </div>
