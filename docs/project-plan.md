@@ -293,7 +293,7 @@ sequenceDiagram
 | ------ | ------------------------------------------- | ---------------------------------------------------------------- |
 | `POST` | `/api/auth/register`                        | Create an account (hashes the password, never stores it plain)   |
 | `POST` | `/api/auth/login`                           | Verify credentials, issue a JWT                                  |
-| `POST` | `/api/conversations`                        | Start a new conversation + `chat_sessions` row, returns `sessionId` |
+| `POST` | `/api/conversations`                        | Start a new chat session (`chat_sessions` row only), returns `sessionId`; no `conversations` row until first accepted message |
 | `POST` | `/api/sessions/{sessionId}/messages`        | Send a message, get the assistant's structured reply             |
 | `GET`  | `/api/conversations`                        | List the authenticated user's conversations, newest first        |
 | `POST` | `/api/conversations/{conversationId}/resume`| Create a new `chat_sessions` row against an existing conversation |
@@ -552,6 +552,7 @@ Framed that way, Scala is a reasonable choice **for this company's goals**, even
 
 - Regex pre-filter is reject-on-match, never strip-and-continue; keep the denylist narrow and pattern-specific, not bare words that produce false positives on real shopping messages.
 - A rejected message (regex or Call #1) is never written to `messages` or `conversation_state` — it never entered the conversation.
+- Opening a new chat without sending a message must not write an empty `conversations` row; create the durable conversation only when the first message is accepted and persisted.
 - Every route touching a conversation resource checks the JWT's `user_id` against the resource owner before doing anything else — this is not optional, it is the IDOR protection.
 
 **Logging**

@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="sbt: com.google.api:api-common:2.45.0:jar" type="java-imported" external-system-id="SBT">
+    <properties groupId="com.google.api" artifactId="api-common" version="2.45.0" baseVersion="2.45.0" />
+    <CLASSES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/com/google/api/api-common/2.45.0/api-common-2.45.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/com/google/api/api-common/2.45.0/api-common-2.45.0-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

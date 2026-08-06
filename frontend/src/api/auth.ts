@@ -1,57 +1,82 @@
-// Authentication via Supabase Auth
+// Authentication against our own backend (see docs/authentication.md).
+// USE_MOCK_API mirrors the pattern in api/conversations.ts: while the Scala
+// backend's /api/auth/* endpoints don't exist yet, auth is simulated entirely
+// in localStorage so signup/login keep working end-to-end in the browser.
 
-import { supabase } from "../lib/supabase";
+import { apiFetch } from "./client";
 import type { User } from "../types";
 
-function mapSupabaseUser(supabaseUser: any): User {
-  return {
-    id: supabaseUser.id,
-    fullName: supabaseUser.user_metadata?.full_name || "",
-    email: supabaseUser.email,
-  };
+const USE_MOCK_API = true;
+
+const MOCK_USERS_KEY = "mock_users";
+
+interface MockUser {
+  id: string;
+  fullName: string;
+  email: string;
+  password: string;
+}
+
+function loadMockUsers(): MockUser[] {
+  const raw = localStorage.getItem(MOCK_USERS_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+function saveMockUsers(users: MockUser[]) {
+  localStorage.setItem(MOCK_USERS_KEY, JSON.stringify(users));
+}
+
+function toUser(mockUser: MockUser): User {
+  return { id: mockUser.id, fullName: mockUser.fullName, email: mockUser.email };
 }
 
 export async function register(fullName: string, email: string, password: string) {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { full_name: fullName },
-      emailRedirectTo: `${window.location.origin}/verify-email`,
-    },
+  if (USE_MOCK_API) {
+    const users = loadMockUsers();
+    if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
+      throw new Error("An account with this email already exists. Please log in instead.");
+    }
+
+    const mockUser: MockUser = { id: crypto.randomUUID(), fullName, email, password };
+    users.push(mockUser);
+    saveMockUsers(users);
+
+    return { user: toUser(mockUser), needsVerification: true };
+  }
+
+  const data = await apiFetch<{ user: User; token: string }>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ fullName, email, password }),
   });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  // Supabase quirk: if the email already exists, signUp still "succeeds" but
-  // returns a user with an empty identities array instead of a clear error.
-  // This is how we detect "this email is already registered".
-  if (data.user && data.user.identities && data.user.identities.length === 0) {
-    throw new Error("An account with this email already exists. Please log in instead.");
-  }
-
-  return { user: data.user ? mapSupabaseUser(data.user) : null, needsVerification: !data.session };
+  saveAuth(data.user, data.token);
+  return { user: data.user, needsVerification: false };
 }
 
 export async function login(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    if (error.message.toLowerCase().includes("email not confirmed")) {
-      throw new Error("Please verify your email before logging in. Check your inbox for the link.");
+  if (USE_MOCK_API) {
+    const users = loadMockUsers();
+    const mockUser = users.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+    );
+    if (!mockUser) {
+      throw new Error("Invalid email or password.");
     }
-    throw new Error(error.message);
+
+    const user = toUser(mockUser);
+    const token = `mock-token-${mockUser.id}`;
+    saveAuth(user, token);
+    return { user, token };
   }
 
-  const user = mapSupabaseUser(data.user);
-  saveAuth(user, data.session.access_token);
-  return { user, token: data.session.access_token };
+  const data = await apiFetch<{ user: User; token: string }>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  saveAuth(data.user, data.token);
+  return { user: data.user, token: data.token };
 }
 
 export async function logout() {
-  await supabase.auth.signOut();
   localStorage.removeItem("token");
   localStorage.removeItem("user");
 }
@@ -75,11 +100,5 @@ export function isAuthenticated(): boolean {
 }
 
 export async function restoreSession(): Promise<User | null> {
-  const { data } = await supabase.auth.getSession();
-  if (data.session) {
-    const user = mapSupabaseUser(data.session.user);
-    saveAuth(user, data.session.access_token);
-    return user;
-  }
-  return null;
+  return getStoredUser();
 }

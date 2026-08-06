@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="sbt: org.jboss.xnio:xnio-nio:3.8.8.Final:jar" type="java-imported" external-system-id="SBT">
+    <properties groupId="org.jboss.xnio" artifactId="xnio-nio" version="3.8.8.Final" baseVersion="3.8.8.Final" />
+    <CLASSES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/org/jboss/xnio/xnio-nio/3.8.8.Final/xnio-nio-3.8.8.Final.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/org/jboss/xnio/xnio-nio/3.8.8.Final/xnio-nio-3.8.8.Final-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

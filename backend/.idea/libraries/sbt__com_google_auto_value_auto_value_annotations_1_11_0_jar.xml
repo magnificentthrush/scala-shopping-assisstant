@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="sbt: com.google.auto.value:auto-value-annotations:1.11.0:jar" type="java-imported" external-system-id="SBT">
+    <properties groupId="com.google.auto.value" artifactId="auto-value-annotations" version="1.11.0" baseVersion="1.11.0" />
+    <CLASSES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/com/google/auto/value/auto-value-annotations/1.11.0/auto-value-annotations-1.11.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/com/google/auto/value/auto-value-annotations/1.11.0/auto-value-annotations-1.11.0-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

@@ -8,3 +8,12 @@ logs/
 *.log
 
 ISSUES.md
+
+# Feature explanation docs (local only)
+explanation/
+
+
+.postman/
+postman/
+.metals/
+.vscode/

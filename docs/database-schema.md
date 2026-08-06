@@ -127,7 +127,7 @@ CREATE TABLE conversations (
 );
 ```
 
-The durable, user-facing chat history. `last_message_at` drives the sort order of `GET /api/conversations` (most recently active first). `title` is nullable — an untitled chat is valid.
+The durable, user-facing chat history. `last_message_at` drives the sort order of `GET /api/conversations` (most recently active first). `title` is nullable — an untitled chat is valid. Conversation rows are created lazily only after the first user message is accepted; opening a new chat without sending a message must not create an empty `conversations` row.
 
 **Delete is a hard delete.** `ON DELETE CASCADE` on `user_id` (and on every table below that references `conversations.id`) means deleting a conversation removes its messages, state, and sessions in the same operation. There is deliberately no `deleted_at` / soft-delete column for MVP — do not add one unless explicitly requested later.
 
@@ -149,7 +149,6 @@ CREATE TABLE messages (
   role             TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
   content          TEXT NOT NULL,
   filters_snapshot JSONB,
-  safe             BOOLEAN,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (conversation_id, sequence_number)
 );
@@ -160,9 +159,8 @@ CREATE TABLE messages (
 | `sequence_number` | Explicit per-conversation ordering. Turn order is never inferred from `created_at` alone. |
 | `role` | `"user"` or `"assistant"`. |
 | `filters_snapshot` | The filters believed to be true **after this turn** — an audit trail, not the live value (see `conversation_state` below). |
-| `safe` | The validation result for this turn (`true`/`false`); `null` for assistant rows, which are never validated by the pre-filter/Call #1 pipeline. |
 
-`messages` is the durable turn-by-turn record. It intentionally duplicates information that also lives (in current form) in `conversation_state` — that duplication is the point: `conversation_state` only ever tells you *now*, while `messages.filters_snapshot`/`safe` tell you what the system believed *at that point in time*. Rejected/unsafe user input is never written here — see the [security pipeline](ARCHITECTURE.md#6-prompt-validation--security--two-stage-pipeline) for the exact ordering.
+`messages` is the durable turn-by-turn record. It intentionally duplicates filter information that also lives (in current form) in `conversation_state` — that duplication is the point: `conversation_state` only ever tells you *now*, while `messages.filters_snapshot` tells you what filters the system believed *at that point in time*. Rejected/unsafe user input is never written here (Call #1 `safe` lives only in the validation pipeline, not as a DB column) — see the [security pipeline](ARCHITECTURE.md#6-prompt-validation--security--two-stage-pipeline) for the exact ordering.
 
 ### `conversation_state`
 
@@ -189,7 +187,7 @@ CREATE TABLE chat_sessions (
 );
 ```
 
-The ephemeral runtime handle — one row per active connection/tab. The `sessionId` the frontend sends on `POST /api/sessions/{sessionId}/messages` is a `chat_sessions.id`. Resuming a past conversation (`POST /api/conversations/{conversationId}/resume`) creates a **new** row here pointing at the **same** `conversation_id`; it never creates a new conversation and never touches `messages` or `conversation_state`. `expires_at` is nullable and reserved for a future cleanup job — nothing reads it yet.
+The ephemeral runtime handle — one row per active connection/tab. The `sessionId` the frontend sends on `POST /api/sessions/{sessionId}/messages` is a `chat_sessions.id`. Starting a new chat creates this session handle first, and the durable `conversations` row is created only when the first message is accepted. Resuming a past conversation (`POST /api/conversations/{conversationId}/resume`) creates a **new** row here pointing at the **same** `conversation_id`; it never creates a new conversation and never touches `messages` or `conversation_state`. `expires_at` is nullable and reserved for a future cleanup job — nothing reads it yet.
 
 ### Indexes
 
@@ -225,7 +223,9 @@ data/migrations/
 ├── 001_products_catalog.sql
 ├── 002_init_users_and_conversations.sql
 ├── 003_add_messages_and_state.sql
-└── 004_add_indexes.sql
+├── 004_add_indexes.sql
+├── 005_products_readonly_rls.sql
+└── 006_drop_messages_safe.sql
 ```
 
 Applied with `data/scripts/apply_migrations.py` (requires `SUPABASE_DB_URL`, a direct Postgres connection string — different from the `SUPABASE_URL`/`SUPABASE_KEY` client credentials the app uses). The runner reads each file, checks whether its version is already in `schema_migrations`, and if not, runs it and records the version — all in one transaction per file.

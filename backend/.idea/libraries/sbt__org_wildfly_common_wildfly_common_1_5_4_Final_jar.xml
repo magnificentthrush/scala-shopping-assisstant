@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="sbt: org.wildfly.common:wildfly-common:1.5.4.Final:jar" type="java-imported" external-system-id="SBT">
+    <properties groupId="org.wildfly.common" artifactId="wildfly-common" version="1.5.4.Final" baseVersion="1.5.4.Final" />
+    <CLASSES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/org/wildfly/common/wildfly-common/1.5.4.Final/wildfly-common-1.5.4.Final.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/org/wildfly/common/wildfly-common/1.5.4.Final/wildfly-common-1.5.4.Final-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
