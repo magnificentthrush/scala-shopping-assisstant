@@ -275,6 +275,50 @@ User message
 
 The LLM's job is understanding language and writing language. It is never asked to produce SQL, and the backend never executes LLM-authored queries — retrieval stays deterministic, debuggable, and safe from injection through the query layer itself.
 
+### Filter transparency vs. a confirmation gate
+
+**Decision:** every `recommend` turn returns the resolved filters (as a short human-readable summary in `reply`) **together with** the product results, in the same response. There is no separate "show filters → wait for the user to say yes → then search" step, and no extra `mode` value for it — only the two that already exist, `recommend` and `clarify`.
+
+**Why not gate search behind an explicit confirmation step:**
+
+- It adds a mandatory extra round trip — and an extra LLM call — to the common case, even when the user's request was already unambiguous (e.g. "Nike running shoes under $200" needs no confirmation to be useful).
+- It requires new state that doesn't exist today: a `conversation_state.status` field (`pendingConfirmation` / `confirmed`) and a third `mode` value, on top of the `recommend`/`clarify` contract already frozen in [`API_CONTRACT.md`](API_CONTRACT.md).
+- "Was that reply a confirmation, an edit, or neither?" (e.g. "yeah, but under $150 instead") is itself a fuzzy classification problem, stacked on top of the two the pipeline already runs (Call #1 safety, Call #2 filters/response).
+- It creates a dead-end failure mode: the user confirms after several turns, and the exact filter combination returns zero rows — a worse outcome than seeing partial results earlier and adjusting.
+
+Instead, filters are surfaced as a lightweight summary alongside the product cards; the user corrects them the same way they'd correct anything else — a normal follow-up message that goes through the same filter-merge path already described in §4 (the two-session budget-update example applies identically to single-session refinement, just without the second session).
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as React Frontend
+    participant BE as Scala Backend
+    participant LLM as LLM (Call #2)
+    participant PP as ProductProvider
+
+    U->>FE: "shoes under $200, running, Nike"
+    FE->>BE: POST /api/sessions/{sessionId}/messages
+    BE->>LLM: extract filters + draft response
+    LLM-->>BE: { filters: {...}, mode: "recommend", assistantResponse }
+    BE->>PP: search(filters)
+    PP-->>BE: top 5 products
+    BE-->>FE: 200 { reply (states filters used), mode: "recommend", products }
+    FE->>U: filter summary + product cards, same turn
+
+    U->>FE: "actually make it under $150"
+    FE->>BE: POST /api/sessions/{sessionId}/messages (same session)
+    BE->>LLM: merge filter update
+    LLM-->>BE: { filters: updated, mode: "recommend" }
+    BE->>PP: search(updated filters)
+    PP-->>BE: updated products
+    BE-->>FE: 200 { reply, mode: "recommend", products: updated }
+    FE->>U: updated filter summary + updated product cards
+```
+
+If a message doesn't carry enough to search meaningfully (e.g. no category at all), `mode: "clarify"` is used exactly as already contracted — no new mode is introduced for "not enough info yet." Zero-result searches are a normal `recommend`-mode outcome (`products: []` with a `reply` suggesting which filter to relax), not a dead end reached only after a multi-turn confirmation commitment.
+
+**Revisit this if:** user testing shows people are frequently annoyed by a *wrong* inferred filter (the LLM guessed something they didn't say). If so, add a narrowly-scoped, conditional confirmation only when the LLM's own extraction is a guess rather than an explicit statement — not a universal gate in front of every search.
+
 ## 6. Prompt validation & security — two-stage pipeline
 
 Every incoming user message goes through this pipeline, in this order, **before** it is trusted as part of the conversation:
