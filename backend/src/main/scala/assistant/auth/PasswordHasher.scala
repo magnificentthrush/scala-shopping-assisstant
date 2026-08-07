@@ -18,12 +18,13 @@ object PasswordHasher {
   private val Parallelism = 1
 
   def hash(password: String): String = {
-    val argon2 = Argon2Factory.create(Argon2Type) //create argon2 hasher of argon2id variant
-    val chars = password.toCharArray    // string is immutable (so it remain in memorey, BAD) char[] are mutable and can be erased
+    val argon2 = Argon2Factory.create(Argon2Type)
+    // Prefer char[] over String so we can wipe plaintext from memory after hashing.
+    val chars = password.toCharArray
     try {
-      argon2.hash(Iterations, MemoryCostKib, Parallelism, chars) //return hash $argon2id$v=19$m=19456,t=2,p=1$...
+      argon2.hash(Iterations, MemoryCostKib, Parallelism, chars)
     } finally {
-      argon2.wipeArray(chars) //wipe the the plain text password from memory
+      argon2.wipeArray(chars)
     }
   }
 
