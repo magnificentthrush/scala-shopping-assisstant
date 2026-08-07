@@ -73,9 +73,11 @@ type ErrorBody = {
 
 ## Auth
 
+Flow: **register → verify email → login**. JWT is issued only after the email is verified. Password policy: ≥ 8 characters, ≥ 1 digit, ≥ 1 uppercase. Full design: [`authPlan.md`](authPlan.md).
+
 ### `POST /api/auth/register`
 
-Create an account. No JWT required.
+Create an account. No JWT required. Does **not** log the user in.
 
 **Request**
 
@@ -83,11 +85,11 @@ Create an account. No JWT required.
 {
   "fullName": "Ada Lovelace",
   "email": "ada@example.com",
-  "password": "correct-horse-battery"
+  "password": "correct1Horse"
 }
 ```
 
-**Response `201`**
+**Response `201` (Resend configured)**
 
 ```json
 {
@@ -96,21 +98,60 @@ Create an account. No JWT required.
     "fullName": "Ada Lovelace",
     "email": "ada@example.com"
   },
-  "token": "eyJhbGciOi..."
+  "needsVerification": true
 }
 ```
 
-Frontend: store `token` (e.g. `localStorage` or memory + refresh on reload) and send it on later calls.
+**Response `201` (Resend not configured — dev fallback)**
+
+When `RESEND_API_KEY` is missing, the API also returns `verificationToken` so the frontend can complete verification without an inbox. Do not assume this field is always present.
+
+```json
+{
+  "user": {
+    "id": "uuid",
+    "fullName": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "needsVerification": true,
+  "verificationToken": "raw-token-normally-only-seen-in-the-email-link"
+}
+```
+
+Frontend: show “check your email”; do **not** store a JWT. With Resend, the user clicks the link in mail (`/verify-email?token=...`). Without Resend, store `verificationToken` temporarily and call verify yourself.
 
 **Errors**
 
 | Status | When |
 | --- | --- |
-| `400` | Missing/invalid fields |
+| `400` | Missing/invalid fields (including password policy) |
 | `409` | Email already registered |
 
 ```json
 { "error": "Email already registered", "code": "EMAIL_TAKEN" }
+```
+
+---
+
+### `GET /api/auth/verify-email?token=<raw token>`
+
+Activate an account. No JWT required — the token in the query string is the credential.
+
+**Response `200`**
+
+```json
+{ "verified": true }
+```
+
+**Errors**
+
+| Status | When | `code` |
+| --- | --- | --- |
+| `400` | Missing/invalid token | `TOKEN_INVALID` |
+| `400` | Token expired | `TOKEN_EXPIRED` |
+
+```json
+{ "error": "This verification link is invalid or has expired.", "code": "TOKEN_INVALID" }
 ```
 
 ---
@@ -122,7 +163,7 @@ Frontend: store `token` (e.g. `localStorage` or memory + refresh on reload) and 
 ```json
 {
   "email": "ada@example.com",
-  "password": "correct-horse-battery"
+  "password": "correct1Horse"
 }
 ```
 
@@ -139,14 +180,21 @@ Frontend: store `token` (e.g. `localStorage` or memory + refresh on reload) and 
 }
 ```
 
+Frontend: store `token` (e.g. `localStorage`) and send it on later calls as `Authorization: Bearer <jwt>`.
+
 **Errors**
 
-| Status | When |
-| --- | --- |
-| `401` | Bad email/password |
+| Status | When | `code` |
+| --- | --- | --- |
+| `401` | Bad email/password | `INVALID_CREDENTIALS` |
+| `403` | Account exists but email not verified | `EMAIL_NOT_VERIFIED` |
 
 ```json
 { "error": "Invalid email or password", "code": "INVALID_CREDENTIALS" }
+```
+
+```json
+{ "error": "Please verify your email before logging in.", "code": "EMAIL_NOT_VERIFIED" }
 ```
 
 ---
@@ -447,7 +495,7 @@ No auth.
 ## Frontend integration checklist
 
 1. **Base client** — `fetch(`${import.meta.env.VITE_API_URL}${path}`, { headers })`.
-2. **Attach JWT** on every call except register/login/health.
+2. **Attach JWT** on every call except register / verify-email / login / health.
 3. **On 401** — clear token, redirect to login.
 4. **State to keep in the app:**
    - `token`, `user`
@@ -456,6 +504,7 @@ No auth.
    - `conversations[]` for the sidebar
 5. **Optimistic UI:** you may show the user bubble immediately on send; on `422` / `5xx`, remove it or mark it failed.
 6. **Mocking:** until backend ships a route, return the sample JSON above from a stub in `frontend/src/api/` behind a `USE_MOCK_API` flag.
+7. **Auth flow:** register does not store a JWT; only login does. After signup, complete `verify-email` before login.
 
 ---
 
@@ -463,8 +512,9 @@ No auth.
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| `POST` | `/api/auth/register` | No | Create account + JWT |
-| `POST` | `/api/auth/login` | No | Login + JWT |
+| `POST` | `/api/auth/register` | No | Create account; email verification required |
+| `GET` | `/api/auth/verify-email` | No | Activate account via token |
+| `POST` | `/api/auth/login` | No | Login + JWT (verified accounts only) |
 | `POST` | `/api/conversations` | Yes | New chat → `sessionId` |
 | `GET` | `/api/conversations` | Yes | Sidebar list |
 | `POST` | `/api/conversations/{id}/resume` | Yes | Resume → new `sessionId` + messages |
@@ -480,6 +530,7 @@ No auth.
 
 ## See also
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — why `sessionId` ≠ `conversationId`, security pipeline, ownership rules
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — why `sessionId` ≠ `conversationId`, security pipeline, ownership rules, auth endpoints
+- [`authPlan.md`](authPlan.md) — sequenced auth implementation plan
 - [`database-schema.md`](database-schema.md) — persistence behind these shapes
 - [`project-plan.md`](project-plan.md) — sprint ownership / timeline

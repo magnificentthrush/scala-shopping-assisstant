@@ -103,16 +103,19 @@ These five tables support accounts, durable chat history, and the runtime sessio
 
 ```sql
 CREATE TABLE users (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  full_name     TEXT NOT NULL,
-  email         TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name                     TEXT NOT NULL,
+  email                         TEXT NOT NULL UNIQUE,
+  password_hash                 TEXT NOT NULL,
+  email_verified                BOOLEAN NOT NULL DEFAULT false,
+  verification_token_hash       TEXT,
+  verification_token_expires_at TIMESTAMPTZ,
+  created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at                    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
-`password_hash` is an Argon2 or bcrypt hash, salted — the plaintext password is never stored or logged. No separate sessions/tokens table exists; auth is stateless JWT (see `ARCHITECTURE.md` §3).
+`password_hash` is an Argon2id hash, salted — the plaintext password is never stored or logged. Email verification columns are added by `007_add_email_verification_to_users.sql`: store the **SHA-256 hash** of the raw token (not the raw token itself); clear token columns after successful verify. No separate sessions/tokens table exists; auth is stateless JWT (see `ARCHITECTURE.md` §3 and `authPlan.md`).
 
 ### `conversations`
 

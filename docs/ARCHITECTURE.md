@@ -76,7 +76,8 @@ data/
 │   ├── 001_products_catalog.sql
 │   ├── 002_init_users_and_conversations.sql
 │   ├── 003_add_messages_and_state.sql
-│   └── 004_add_indexes.sql
+│   ├── 004_add_indexes.sql
+│   └── … (forward-only; e.g. 007_add_email_verification_to_users.sql)
 ├── seed/
 │   └── seed_products.py     # upserts clean_products.jsonl; idempotent; run manually
 ├── clean_products.jsonl     # cleaned catalog — seed input
@@ -88,21 +89,33 @@ data/
 
 ## 3. Authentication & authorization
 
-The app has real accounts, not anonymous sessions. `users` stores `full_name`, `email`, and `password_hash` (Argon2 or bcrypt, salted — never plaintext, never a reversible hash). Login issues a **JWT**; the frontend sends it on every authenticated request; backend routes are protected by JWT middleware.
+The app has real accounts, not anonymous sessions. `users` stores `full_name`, `email`, and `password_hash` (Argon2id, salted — never plaintext, never a reversible hash), plus email-verification columns (`email_verified`, `verification_token_hash`, `verification_token_expires_at`). Flow: **register → verify email → login**. Only a successful login issues a **JWT**; the frontend sends it on every authenticated request; backend routes are protected by JWT middleware.
+
+Verification emails are sent via **Resend** from the verified domain **`scalainterns.dev`** (see [`authPlan.md`](authPlan.md)). Password reset / forgot-password is out of scope for the current auth pass.
 
 **Authorization is not optional and not implicit.** Every route touching `conversations`, `messages`, `conversation_state`, or `chat_sessions` must resolve the owning `user_id` (via `chat_sessions.user_id` or `conversations.user_id`) and compare it against the JWT's subject **before touching any other data**. This is the IDOR (insecure direct object reference) protection for every conversation-history feature — list, resume, delete, and rename all depend on this check running first, not as an afterthought.
 
 No separate sessions/tokens table is needed for stateless JWT. If refresh tokens are added later, that gets its own migration and its own docs section — it is explicitly out of scope now.
 
+### Auth endpoints
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/auth/register` | No | Create account (hashed password); send verification email; no JWT yet |
+| `GET` | `/api/auth/verify-email?token=...` | No | Mark email verified; single-use token with expiry |
+| `POST` | `/api/auth/login` | No | Verify credentials + `email_verified`; issue JWT |
+
+Request/response shapes: [`API_CONTRACT.md`](API_CONTRACT.md). Implementation sequence: [`authPlan.md`](authPlan.md).
+
 ### Authentication hardening requirements (must implement)
 
 These are easy to skip and are treated as implementation requirements, not optional polish:
 
-- **Rate-limit auth endpoints.** Apply server-side rate limiting on `register`, `login`, and `forgot-password` style endpoints to reduce brute-force attempts and email-bombing abuse.
-- **Prevent account enumeration.** Password-reset requests must always return a neutral response like "If that email exists, we sent a link." Never reveal whether an email is registered.
-- **Expire and single-use verify/reset tokens.** Email verification and password reset tokens must have short expiry windows and must be invalidated immediately after first successful use.
-- **Use constant-time credential verification.** Password checks must use vetted Argon2/bcrypt library verification paths; never implement custom string/hash comparisons.
-- **Email deliverability is part of readiness.** Configure a verified sender domain with SPF/DKIM (and DMARC if available) so auth emails reliably arrive and do not land in spam.
+- **Rate-limit auth endpoints.** Apply server-side rate limiting on `register` and `login` to reduce brute-force attempts and abuse. (`forgot-password` when that endpoint exists later.)
+- **Prevent account enumeration.** Password-reset requests (when added) must always return a neutral response like "If that email exists, we sent a link." Never reveal whether an email is registered. Login already uses a generic `INVALID_CREDENTIALS` for bad email or bad password.
+- **Expire and single-use verify tokens.** Email verification tokens must have a short expiry window and must be invalidated immediately after first successful use.
+- **Use constant-time credential verification.** Password checks must use vetted Argon2 library verification paths; never implement custom string/hash comparisons.
+- **Email deliverability is part of readiness.** Sender domain `scalainterns.dev` must stay verified in Resend with SPF/DKIM (and DMARC if available) so auth emails reliably arrive and do not land in spam.
 
 ## 4. Conversations: durable history vs. ephemeral sessions
 

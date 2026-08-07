@@ -252,8 +252,8 @@ sequenceDiagram
 Each task assumes the ones before it are done — don't skip ahead.
 
 1. **[This document]** `docs/authPlan.md` — done.
-2. Update `docs/API_CONTRACT.md`: register response drops `token` and gains `needsVerification`; add the `GET /api/auth/verify-email` section; add the `403 EMAIL_NOT_VERIFIED` case to `login`.
-3. Write and apply migration `data/migrations/007_add_email_verification_to_users.sql` against the shared Supabase project (via `data/scripts/apply_migrations.py`); announce it to the team.
+2. Update `docs/API_CONTRACT.md` — done (register / verify-email / login; also mirrored in `ARCHITECTURE.md` §3).
+3. Write and apply migration `data/migrations/007_add_email_verification_to_users.sql` — done (applied to shared Supabase; `database-schema.md` updated).
 4. Add backend dependencies to `backend/build.sbt`: `jwt-scala` (`jwt-upickle`), `argon2-jvm`, `sttp` (`client3` core) — sttp is also used by `ResendEmailService` for the Resend HTTP API.
 5. `assistant/config/AppConfig.scala` — central env var loader for `JWT_SECRET`, `JWT_EXPIRES_IN_HOURS`, `SUPABASE_URL`, `SUPABASE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM` (default `noreply@scalainterns.dev`), `FRONTEND_URL`, plus `emailEnabled: Boolean` (`RESEND_API_KEY` non-blank). Document vars in `.env.example`.
 6. `assistant/domain/` — `User`, `RegisterRequest`, `LoginRequest`, `AuthUserResponse`, `ErrorBody` case classes with upickle `ReadWriter`s.
