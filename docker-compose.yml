@@ -11,6 +11,11 @@ services:
       SUPABASE_KEY: ${SUPABASE_KEY}
       GEMMA_API_KEY: ${GEMMA_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN_HOURS: ${JWT_EXPIRES_IN_HOURS:-168}
+      # Resend — blank RESEND_API_KEY keeps Phase 1 localStorage fallback
+      # (see docs/authPlan.md). EMAIL_FROM defaults to the verified domain.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@scalainterns.dev}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       BACKEND_URL: ${BACKEND_URL:-http://localhost:8080}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

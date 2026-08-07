@@ -17,3 +17,6 @@ explanation/
 postman/
 .metals/
 .vscode/
+
+.bloop/
+metals.sbt

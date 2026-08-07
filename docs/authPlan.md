@@ -44,7 +44,7 @@ Build this **one task at a time, in the order listed in [§7](#7-sequenced-task-
 | Decision | Choice | Why |
 | --- | --- | --- |
 | Password hashing | **Argon2id** via `argon2-jvm` | OWASP's current recommendation over bcrypt; handles salting internally; verify path is constant-time by construction |
-| JWT library | **jwt-scala**, `jwt-upickle` module, signed **HS256** | The only JWT library with native uPickle support — matches the project's existing JSON stack (`upickle`, per `build.sbt`) instead of pulling in a second JSON codec |
+| JWT library | **jwt-scala**, `jwt-core` module, signed **HS256** | `jwt-core` has no JSON dependency of its own (`Jwt.encode`/`decodeRaw` take/return the claim as a plain JSON string), so `JwtService` builds/parses that string with the project's existing `upickle`. The `jwt-upickle` module was tried first but pulls in `upickle` 4.4.0, which conflicts with `cask` 0.9.2's `upickle` 3.x — `jwt-core` avoids a second JSON codec without that conflict |
 | JWT secret | `JWT_SECRET` env var (already present in `.env.example`) | — |
 | JWT lifetime | 7 days, via a configurable `JWT_EXPIRES_IN_HOURS` (default `168`) | No refresh tokens are in scope, so a short-lived token with no renewal path just means constant forced re-logins — bad UX for an MVP with this constraint |
 | Email delivery | `EmailService` trait; `ResendEmailService` via **sttp** → Resend HTTP API from **`scalainterns.dev`**; `NoOpEmailService` when `RESEND_API_KEY` is missing | Verified custom domain + Resend matches the deliverability note in `ARCHITECTURE.md` §3; trait keeps the provider out of `AuthService` (see "Phased email delivery" above) |
@@ -254,9 +254,9 @@ Each task assumes the ones before it are done — don't skip ahead.
 1. **[This document]** `docs/authPlan.md` — done.
 2. Update `docs/API_CONTRACT.md` — done (register / verify-email / login; also mirrored in `ARCHITECTURE.md` §3).
 3. Write and apply migration `data/migrations/007_add_email_verification_to_users.sql` — done (applied to shared Supabase; `database-schema.md` updated).
-4. Add backend dependencies to `backend/build.sbt`: `jwt-scala` (`jwt-upickle`), `argon2-jvm`, `sttp` (`client3` core) — sttp is also used by `ResendEmailService` for the Resend HTTP API.
-5. `assistant/config/AppConfig.scala` — central env var loader for `JWT_SECRET`, `JWT_EXPIRES_IN_HOURS`, `SUPABASE_URL`, `SUPABASE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM` (default `noreply@scalainterns.dev`), `FRONTEND_URL`, plus `emailEnabled: Boolean` (`RESEND_API_KEY` non-blank). Document vars in `.env.example`.
-6. `assistant/domain/` — `User`, `RegisterRequest`, `LoginRequest`, `AuthUserResponse`, `ErrorBody` case classes with upickle `ReadWriter`s.
+4. Add backend dependencies to `backend/build.sbt`: `jwt-scala` (`jwt-core`), `argon2-jvm`, `sttp` (`client3` core) — sttp is also used by `ResendEmailService` for the Resend HTTP API. **Done** — used `jwt-core` instead of `jwt-upickle` (see §2 note on the `upickle` version conflict); `sbt compile` passes clean.
+5. `assistant/config/AppConfig.scala` — central env var loader for `JWT_SECRET`, `JWT_EXPIRES_IN_HOURS`, `SUPABASE_URL`, `SUPABASE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM` (default `noreply@scalainterns.dev`), `FRONTEND_URL`, plus `emailEnabled: Boolean` (`RESEND_API_KEY` non-blank). Document vars in `.env.example`. **Done** — vars already documented in `.env.example`; `AppConfig.fromEnv()` reads them with `sys.error` on missing required vars (`JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_KEY`) and safe defaults for the rest.
+6. `assistant/domain/` — `User`, `RegisterRequest`, `LoginRequest`, `AuthUserResponse`, `ErrorBody` case classes with upickle `ReadWriter`s. **Done** — all five live in `domain/User.scala`; `User`'s fields use `@key("snake_case")` to match PostgREST's column names directly. Also added `domain/NullableOption.scala`: upickle 3.3.1's default `Option[T]` codec deserializes a JSON `null` into a raw Scala `null` instead of `None` (NPEs on `.isEmpty`/`.map`) and serializes `Some(t)` as a boxed `[t]` array instead of a bare value — verified empirically with a throwaway `runMain` script, then deleted it. `NullableOption.nullableOptionRW` fixes both directions to match upickle 4.x behavior; **any future domain class with an `Option[_]` field must import it** (`UserRepo` in step 8 will need this for reading Supabase's nullable columns).
 7. `assistant/auth/PasswordHasher.scala` (Argon2id `hash`/`verify`) — sanity-check with a quick hash → verify round trip before moving on.
 8. `assistant/repo/SupabaseRestClient.scala` (generic PostgREST GET/POST/PATCH helper) + `assistant/repo/UserRepo.scala` (`findByEmail`, `insert`, `findByVerificationTokenHash`, `markVerified`).
 9. `assistant/services/EmailService.scala` — the trait (`sendVerificationEmail(to, link)`) + `ResendEmailService` (sttp → Resend API, `from` = `EMAIL_FROM` on `scalainterns.dev`) + `NoOpEmailService` (logs the link when Resend is not configured). Wire `ResendEmailService` when `emailEnabled` is true.
@@ -282,6 +282,7 @@ Each task assumes the ones before it are done — don't skip ahead.
 backend/src/main/scala/assistant/
 ├── config/AppConfig.scala
 ├── domain/User.scala                 (+ request/response case classes)
+├── domain/NullableOption.scala        (upickle 3.3.1 Option[T] null-safety fix — see §7 step 6)
 ├── auth/PasswordHasher.scala
 ├── auth/JwtService.scala
 ├── auth/AuthedRoute.scala
