@@ -1,9 +1,13 @@
 // Chat/messaging API calls — matches docs/API_CONTRACT.md
 import { apiFetch } from "./client";
 import type { Message, Product } from "../types";
-import { registerMockConversation, touchMockConversation, appendMockMessages } from "./conversations";
+import {
+  registerMockConversation,
+  touchMockConversation,
+  appendMockMessages,
+} from "./conversations";
 
-const USE_MOCK_API = true;
+const USE_MOCK_API = false;
 
 interface StartConversationResponse {
   conversationId: string;
@@ -34,13 +38,15 @@ export async function startConversation(): Promise<StartConversationResponse> {
       messages: [],
     };
   }
-  return apiFetch<StartConversationResponse>("/api/conversations", { method: "POST" });
+  return apiFetch<StartConversationResponse>("/api/conversations", {
+    method: "POST",
+  });
 }
 
 export async function sendMessage(
   sessionId: string,
   conversationId: string,
-  message: string
+  message: string,
 ): Promise<SendMessageResponse> {
   if (USE_MOCK_API) {
     await new Promise((r) => setTimeout(r, 800));
@@ -56,7 +62,8 @@ export async function sendMessage(
     const assistantMessage: Message = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content: "This is a mock reply — the real chat backend isn't wired up yet.",
+      content:
+        "This is a mock reply — the real chat backend isn't wired up yet.",
       sequenceNumber: 2,
       createdAt: new Date().toISOString(),
       products: [],
