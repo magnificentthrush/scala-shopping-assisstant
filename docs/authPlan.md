@@ -20,7 +20,7 @@ Build this **one task at a time, in the order listed in [§7](#7-sequenced-task-
 
 - Password reset / "forgot password". No reset-token columns, no reset endpoints yet.
 - Refresh tokens — already excluded by `docs/ARCHITECTURE.md` §3 ("stateless JWT... if refresh tokens are added later, that gets its own migration and its own docs section").
-- A dedicated "resend verification email" endpoint — a reasonable fast-follow if expired tokens turn out to be a problem in testing, but not required for the first working version.
+- A dedicated "resend verification email" endpoint — deferred to [§8 Follow-ups](#8-follow-ups-implement-after-7-is-done); not required for the first working version.
 
 **Contract change vs. the current `docs/API_CONTRACT.md`:** that doc currently has `register` return a JWT immediately, with no verification step. This plan changes that: `register` returns `201 { user, needsVerification: true }` with **no token**, and a new `GET /api/auth/verify-email` endpoint is added. `login` gains a `403 EMAIL_NOT_VERIFIED` case. Update `docs/API_CONTRACT.md` as task 2 below so no one builds against the stale shape.
 
@@ -277,7 +277,32 @@ Each task assumes the ones before it are done — don't skip ahead.
 
 ---
 
-## 8. Files touched (reference)
+## 8. Follow-ups (implement after §7 is done)
+
+Do **not** start these until steps 1–20 above are complete and the core auth flow works end-to-end.
+
+### 8.1 Resend verification email / expired-token recovery
+
+**Problem today:** When a user registers, the row stays in `users` with `email_verified = false`. The verification link expires after 24h (`TOKEN_EXPIRED`). We do **not** delete that row. After expiry the user is stuck:
+
+| Action | What happens |
+| --- | --- |
+| Login | `403 EMAIL_NOT_VERIFIED` |
+| Old verify link | `400 TOKEN_EXPIRED` |
+| Register same email again | `409 EMAIL_TAKEN` |
+
+There is no way in-app to get a new link without manual DB cleanup.
+
+**What to build (next pass):**
+
+1. Backend: e.g. `POST /api/auth/resend-verification` `{ "email": "..." }` — if the user exists and is still unverified, mint a **new** raw token, store its SHA-256 hash + new 24h expiry, send (or Phase-1 return) the new link. Rate-limit this endpoint (same concern as register/login).
+2. Do **not** delete the user row on token expiry — refresh the token on the existing account instead.
+3. Update `docs/API_CONTRACT.md` + Login/Signup UI copy so “verify your email” / “link expired” can offer “Resend verification email.”
+4. Optional later: cleanup job that deletes stale unverified accounts after N days — only if product wants that; not required for unblocking users if resend exists.
+
+---
+
+## 9. Files touched (reference)
 
 **Backend — new files:**
 
@@ -307,7 +332,7 @@ backend/src/main/scala/assistant/
 
 ---
 
-## 9. See also
+## 10. See also
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) §3 — authorization/ownership rules, hardening requirements this plan implements.
 - [`API_CONTRACT.md`](API_CONTRACT.md) — frozen request/response shapes (to be updated per task 2 above).

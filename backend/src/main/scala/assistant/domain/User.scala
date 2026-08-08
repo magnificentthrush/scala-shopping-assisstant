@@ -19,7 +19,7 @@ case class User(
     @key("full_name") fullName: String,
     email: String,
     @key("password_hash") passwordHash: String,
-    @key("email_verified") emailVerified: Boolean,
+    @key("email_verified") emailVerified: Boolean, //default False in db schema
     @key("verification_token_hash") verificationTokenHash: Option[String],
     @key("verification_token_expires_at") verificationTokenExpiresAt: Option[String],
     @key("created_at") createdAt: String,

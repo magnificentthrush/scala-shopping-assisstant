@@ -33,7 +33,7 @@ class UserRepo(client: SupabaseRestClient) {
     */
   def findByVerificationTokenHash(tokenHash: String): Option[User] = {
     val json = client.get(Table, Map("verification_token_hash" -> s"eq.$tokenHash"))
-    read[Seq[User]](json).headOption
+    read[Seq[User]](json).headOption //JSON -> Seq of User Objects -> pick the first one
   }
 
   /** Inserts a new user row and returns it with DB-generated fields
