@@ -6,7 +6,7 @@
 import { apiFetch } from "./client";
 import type { User } from "../types";
 
-const USE_MOCK_API = true;
+const USE_MOCK_API = false;
 
 const MOCK_USERS_KEY = "mock_users";
 
@@ -27,27 +27,45 @@ function saveMockUsers(users: MockUser[]) {
 }
 
 function toUser(mockUser: MockUser): User {
-  return { id: mockUser.id, fullName: mockUser.fullName, email: mockUser.email };
+  return {
+    id: mockUser.id,
+    fullName: mockUser.fullName,
+    email: mockUser.email,
+  };
 }
 
-export async function register(fullName: string, email: string, password: string) {
+export async function register(
+  fullName: string,
+  email: string,
+  password: string,
+) {
   if (USE_MOCK_API) {
     const users = loadMockUsers();
     if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-      throw new Error("An account with this email already exists. Please log in instead.");
+      throw new Error(
+        "An account with this email already exists. Please log in instead.",
+      );
     }
 
-    const mockUser: MockUser = { id: crypto.randomUUID(), fullName, email, password };
+    const mockUser: MockUser = {
+      id: crypto.randomUUID(),
+      fullName,
+      email,
+      password,
+    };
     users.push(mockUser);
     saveMockUsers(users);
 
     return { user: toUser(mockUser), needsVerification: true };
   }
 
-  const data = await apiFetch<{ user: User; token: string }>("/api/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ fullName, email, password }),
-  });
+  const data = await apiFetch<{ user: User; token: string }>(
+    "/api/auth/register",
+    {
+      method: "POST",
+      body: JSON.stringify({ fullName, email, password }),
+    },
+  );
   saveAuth(data.user, data.token);
   return { user: data.user, needsVerification: false };
 }
@@ -56,7 +74,9 @@ export async function login(email: string, password: string) {
   if (USE_MOCK_API) {
     const users = loadMockUsers();
     const mockUser = users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+      (u) =>
+        u.email.toLowerCase() === email.toLowerCase() &&
+        u.password === password,
     );
     if (!mockUser) {
       throw new Error("Invalid email or password.");
@@ -68,10 +88,13 @@ export async function login(email: string, password: string) {
     return { user, token };
   }
 
-  const data = await apiFetch<{ user: User; token: string }>("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
+  const data = await apiFetch<{ user: User; token: string }>(
+    "/api/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    },
+  );
   saveAuth(data.user, data.token);
   return { user: data.user, token: data.token };
 }

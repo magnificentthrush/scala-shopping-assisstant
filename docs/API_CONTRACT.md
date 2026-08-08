@@ -214,7 +214,7 @@ Ordered by `lastMessageAt` descending (newest activity first).
 
 ### `POST /api/conversations/{conversationId}/resume`
 
-Open a past conversation. Creates a **new** `sessionId` against the same conversation.
+**Notes:** Creates a new chat session for the conversation and returns the full conversation history along with the new `sessionId`.
 
 **Auth:** required (must own the conversation)
 
