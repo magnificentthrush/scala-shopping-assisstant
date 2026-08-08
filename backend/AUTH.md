@@ -2,24 +2,76 @@
 
 Short reference for the Scala files added for the auth pipeline (register → verify email → login). Full design: [`docs/authPlan.md`](../docs/authPlan.md).
 
-Not covered here (existed before auth): `Main.scala`, LLM clients, `PromptValidator`, `ValidationResult`.
+Not covered here (existed before auth): LLM clients, `PromptValidator`, `ValidationResult`.
 
 ---
 
 ## How they fit together
 
 ```
-HTTP routes (not built yet — step 13)
-    → AuthService          business logic
-        → PasswordHasher   hash / check passwords
-        → UserRepo         read/write users in DB
-            → SupabaseRestClient   HTTP to Supabase
-        → EmailService     send (or log) verification email
-        → JwtService       issue / check login JWT
-        → AppConfig        secrets & settings
+Main
+  → Cors (every response)
+  → HealthRoutes (/ , /health)
+  → AuthRoutes
+        → @rateLimited on register / login
+        → AuthService          business logic
+            → PasswordHasher   hash / check passwords
+            → UserRepo         read/write users in DB
+                → SupabaseRestClient   HTTP to Supabase
+            → EmailService     send (or log) verification email
+            → JwtService       issue / check login JWT
+            → AppConfig        secrets & settings
+  → @authed(jwt)               (ready for future protected routes)
 ```
 
 Domain types (`User.scala`, `NullableOption.scala`) are the data shapes those layers pass around.
+
+---
+
+## `src/main/scala/assistant/Main.scala`
+
+**What it is:** App entrypoint. Loads config, builds auth services, mounts routes, starts Cask.
+
+| Name | What it does |
+| --- | --- |
+| `mainDecorators` | Applies `Cors` to every matched response |
+| `allRoutes` | `HealthRoutes` + `AuthRoutes` |
+| `main` | Prints ready URLs, then starts the server |
+
+---
+
+## `src/main/scala/assistant/http/Cors.scala`
+
+**What it is:** Decorator that adds CORS headers so the frontend (`FRONTEND_URL`) can call the API from the browser.
+
+| Name | What it does |
+| --- | --- |
+| `Cors(allowedOrigin)` | Adds `Access-Control-Allow-Origin`, `-Headers` (`Authorization`, `Content-Type`), `-Methods`, `-Max-Age` |
+
+---
+
+## `src/main/scala/assistant/http/HealthRoutes.scala`
+
+**What it is:** Simple health checks, separate from auth routes.
+
+| Name | What it does |
+| --- | --- |
+| `GET /` | `{ "message": "ShopPilot backend is running" }` |
+| `GET /health` | `{ "status": "ok" }` |
+
+---
+
+## `src/main/scala/assistant/http/AuthRoutes.scala`
+
+**What it is:** The three auth HTTP endpoints. Thin: parse → `AuthService` → status + JSON.
+
+| Name | What it does |
+| --- | --- |
+| `POST /api/auth/register` | Rate-limited. Creates account; `201` with user + `needsVerification` (+ `verificationToken` only when email is off) |
+| `GET /api/auth/verify-email?token=` | Marks email verified; `200 { verified: true }` |
+| `POST /api/auth/login` | Rate-limited. Returns user + JWT when credentials OK and email verified |
+| `OPTIONS` on those paths | Empty `204` so browser CORS preflight works |
+| On `AuthFailure` | Returns that status + `{ error, code? }` |
 
 ---
 
@@ -123,7 +175,7 @@ Domain types (`User.scala`, `NullableOption.scala`) are the data shapes those la
 
 ## `src/main/scala/assistant/services/AuthService.scala`
 
-**What it is:** The brain of auth. Wires hasher + repo + email + JWT. HTTP routes (later) should call these methods and turn the result into status codes + JSON — not redo this logic.
+**What it is:** The brain of auth. Wires hasher + repo + email + JWT. HTTP routes call these methods and turn the result into status codes + JSON — not redo this logic.
 
 | Name | What it does |
 | --- | --- |
@@ -137,10 +189,30 @@ Domain types (`User.scala`, `NullableOption.scala`) are the data shapes those la
 
 ---
 
-## Not built yet (auth plan steps 12–13)
+## `src/main/scala/assistant/auth/AuthedRoute.scala`
 
-| Planned file | Purpose |
+**What it is:** Cask decorator `@authed(jwt)` for protected routes. Used later by conversation/session endpoints (not by register/login themselves).
+
+| Name | What it does |
 | --- | --- |
-| `auth/AuthedRoute.scala` | Protect routes: read `Authorization: Bearer …`, verify JWT, inject user id |
-| `auth/RateLimiter.scala` | Limit how often register/login can be called per IP |
-| `http/AuthRoutes.scala` | Cask endpoints: `POST /api/auth/register`, `GET /api/auth/verify-email`, `POST /api/auth/login` + CORS |
+| `authed(jwt)` | Annotation class. Checks `Authorization: Bearer <token>`, verifies with `JwtService`, injects `userId` into the handler |
+| On failure | Returns `401` with `ErrorBody` code `UNAUTHORIZED` (missing/bad/expired token). Never logs the token |
+
+---
+
+## `src/main/scala/assistant/auth/RateLimiter.scala`
+
+**What it is:** Cask decorator `@rateLimited()` for abuse protection on auth endpoints (register/login). In-memory on purpose for a single Cask process — solid and simple, not a temporary stub.
+
+| Name | What it does |
+| --- | --- |
+| `rateLimited(maxRequests, windowMs)` | Annotation class. Default **10 requests / 60 seconds** per IP. Each `@rateLimited()` site has its own counters |
+| `rateLimited.clientIp` | Undertow peer address only (never trusts client `X-Forwarded-For`) |
+| `SlidingWindowCounter` | Counter: `tryAcquire(key)` under limit records the hit; over limit denies. Prunes expired/idle keys |
+| On over limit | Returns `429` with `ErrorBody` code `RATE_LIMITED` |
+
+---
+
+## Next (auth plan step 14+)
+
+Manual `curl` end-to-end, then frontend wiring (steps 15–20).
