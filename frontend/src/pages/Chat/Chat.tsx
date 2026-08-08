@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import Sidebar from "../../components/Sidebar/Sidebar";
 import ChatWidget from "../../components/ChatWidget/ChatWidget";
 import ProfileAvatar from "../../components/Navbar/Navbar";
@@ -85,10 +85,6 @@ export default function Chat() {
             >
               <Menu size={20} strokeWidth={1.8} />
             </button>
-            <div className="app-title-button" aria-label="Current assistant">
-              ShopPilot
-              <ChevronDown size={15} strokeWidth={1.8} aria-hidden="true" />
-            </div>
           </div>
           <ProfileAvatar onOpenSettings={() => setSettingsOpen(true)} />
         </header>
