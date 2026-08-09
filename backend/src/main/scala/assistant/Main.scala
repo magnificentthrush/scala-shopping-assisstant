@@ -1,28 +1,41 @@
 package assistant
 
-object Main extends cask.MainRoutes {
+import assistant.auth.JwtService
+import assistant.config.AppConfig
+import assistant.http.{AuthRoutes, Cors, HealthRoutes}
+import assistant.repo.{SupabaseRestClient, UserRepo}
+import assistant.services.{AuthService, EmailService}
+
+/** Backend entrypoint. Wires config → repos/services → HTTP routes and
+  * applies app-wide CORS (docs/authPlan.md §7 step 13).
+  */
+object Main extends cask.Main {
   override def host: String = "0.0.0.0"
   override def port: Int = 8080
 
-  @cask.get("/")
-  def index(): ujson.Value =
-    ujson.Obj(
-      "message" -> "ShopPilot backend is running"
-    )
+  private val config = AppConfig.fromEnv()
+  private val jwt = new JwtService(config)
+  private val authService = new AuthService(
+    config = config,
+    users = new UserRepo(new SupabaseRestClient(config)),
+    emails = EmailService.fromConfig(config),
+    jwt = jwt
+  )
 
-  @cask.get("/health")
-  def health(): ujson.Value =
-    ujson.Obj(
-      "status" -> "ok"
-    )
+  override def mainDecorators: Seq[cask.RawDecorator] =
+    Seq(new Cors(config.frontendUrl))
 
-  initialize()
+  override def allRoutes: Seq[cask.Routes] =
+    Seq(HealthRoutes(), AuthRoutes(authService))
 
-  // Prefer localhost for host-machine browsers; Cask binds 0.0.0.0 inside Docker.
-  val publicUrl = sys.env.getOrElse("BACKEND_URL", s"http://localhost:$port")
-  println(s"")
-  println(s"  ShopPilot backend ready")
-  println(s"  ➜  Local:   $publicUrl")
-  println(s"  ➜  Health:  $publicUrl/health")
-  println(s"")
+  override def main(args: Array[String]): Unit = {
+    val publicUrl = sys.env.getOrElse("BACKEND_URL", s"http://localhost:$port")
+    println("")
+    println("  ShopPilot backend ready")
+    println(s"  ➜  Local:   $publicUrl")
+    println(s"  ➜  Health:  $publicUrl/health")
+    println(s"  ➜  Auth:    $publicUrl/api/auth/register|login|verify-email")
+    println("")
+    super.main(args)
+  }
 }

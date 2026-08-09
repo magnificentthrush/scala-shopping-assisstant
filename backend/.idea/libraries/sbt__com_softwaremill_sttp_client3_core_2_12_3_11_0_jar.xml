@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="sbt: com.softwaremill.sttp.client3:core_2.12:3.11.0:jar" type="java-imported" external-system-id="SBT">
+    <properties groupId="com.softwaremill.sttp.client3" artifactId="core_2.12" version="3.11.0" baseVersion="3.11.0" />
+    <CLASSES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/com/softwaremill/sttp/client3/core_2.12/3.11.0/core_2.12-3.11.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/com/softwaremill/sttp/client3/core_2.12/3.11.0/core_2.12-3.11.0-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
