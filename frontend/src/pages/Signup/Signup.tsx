@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, X, Eye, EyeOff } from "lucide-react";
-import { register } from "../../api/auth";
+import { register, getPendingVerificationToken } from "../../api/auth";
 import { isValidEmail, isValidPassword } from "../../utils/validation";
 import BrandLogo from "../../components/BrandLogo/BrandLogo";
 
@@ -13,6 +13,9 @@ export default function Signup() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  // Phase 1 (no Resend): the backend stores a raw verificationToken in
+  // localStorage so we can offer a "Verify now" shortcut without an inbox.
+  const [hasPendingToken, setHasPendingToken] = useState(false);
 
   const passwordChecks = [
     { label: "At least 8 characters", valid: password.length >= 8 },
@@ -42,6 +45,7 @@ export default function Signup() {
     setLoading(true);
     try {
       await register(name, email, password);
+      setHasPendingToken(!!getPendingVerificationToken());
       setSubmittedEmail(email);
     } catch (err: any) {
       setError(err.message || "Signup failed. Please try again.");
@@ -67,7 +71,16 @@ export default function Signup() {
               We sent a verification link to <strong>{submittedEmail}</strong>. Open it to activate
               your account, then log in.
             </p>
-            <Link to="/login" className="button button--primary">Back to login</Link>
+            {hasPendingToken ? (
+              <>
+                <Link to="/verify-email" className="button button--primary">Verify now</Link>
+                <p className="auth-panel__subtitle">
+                  No email service is configured, so we stored your link for this session instead.
+                </p>
+              </>
+            ) : (
+              <Link to="/login" className="button button--primary">Back to login</Link>
+            )}
           </section>
         </main>
         <footer className="auth-screen__footer">You can close this page after verifying your email.</footer>
