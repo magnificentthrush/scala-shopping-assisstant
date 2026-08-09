@@ -1,5 +1,7 @@
 package assistant
 
+import java.util.concurrent.CountDownLatch
+
 import assistant.auth.JwtService
 import assistant.config.AppConfig
 import assistant.http.{AuthRoutes, Cors, HealthRoutes}
@@ -37,5 +39,8 @@ object Main extends cask.Main {
     println(s"  ➜  Auth:    $publicUrl/api/auth/register|login|verify-email")
     println("")
     super.main(args)
+    // Undertow starts non-blocking; without this the JVM exits right away
+    // under `sbt runMain` (Docker's `~runMain` only restarts on file changes).
+    new CountDownLatch(1).await()
   }
 }

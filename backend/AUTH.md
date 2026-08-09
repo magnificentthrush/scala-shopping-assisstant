@@ -233,6 +233,6 @@ Domain types (`User.scala`, `NullableOption.scala`) are the data shapes those la
 
 ---
 
-## Next (auth plan step 14+)
+## Next (auth plan step 15+)
 
-Manual `curl` end-to-end, then frontend wiring (steps 15–20).
+Step 14 (manual `curl` end-to-end smoke test) is done — see `docs/authPlan.md` §7. Frontend wiring remains (steps 15–20).
