@@ -6,22 +6,42 @@ Not covered here (existed before auth): LLM clients, `PromptValidator`, `Validat
 
 ---
 
-## How they fit together
+## How Main is structured
+
+Keep this diagram in sync whenever wiring in `Main.scala` changes (new routes, new services, new repos).
 
 ```
-Main
-  → Cors (every response)
-  → HealthRoutes (/ , /health)
-  → AuthRoutes
-        → @rateLimited on register / login
-        → AuthService          business logic
-            → PasswordHasher   hash / check passwords
-            → UserRepo         read/write users in DB
-                → SupabaseRestClient   HTTP to Supabase
-            → EmailService     send (or log) verification email
-            → JwtService       issue / check login JWT
-            → AppConfig        secrets & settings
-  → @authed(jwt)               (ready for future protected routes)
+                         Main
+                          │
+                          │  loads AppConfig.fromEnv()
+                          │  builds JwtService, UserRepo, EmailService, AuthService
+                          ▼
+                       HTTP layer
+               ┌──────────┼──────────┐
+               ▼          ▼          ▼
+          AuthRoutes   HealthRoutes  Cors
+               │         (/ , /health)  (mainDecorator on every response)
+               │
+               │  @rateLimited on register / login
+               │  (@authed ready for future protected routes)
+               ▼
+          AuthService
+            │   │   │
+            │   │   └──────────► EmailService
+            │   │                  (NoOp or Resend via fromConfig)
+            │   │
+            │   └──────────────► JwtService
+            │
+            ├──────────────────► PasswordHasher
+            │
+            ▼
+         UserRepo
+            │
+            ▼
+     SupabaseRestClient
+            │
+            ▼
+         Supabase
 ```
 
 Domain types (`User.scala`, `NullableOption.scala`) are the data shapes those layers pass around.

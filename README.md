@@ -8,68 +8,32 @@
 
 ---
 
-## How it works (short version)
+## How it works
 
-1. A user registers/logs in; the backend issues a JWT.
-2. Starting a chat creates only a `chat_session` (the `sessionId` the frontend holds). The durable `conversation` row is created lazily on the first successfully accepted user message.
-3. Each message passes a regex pre-filter, then an LLM **validation** call (`gemini-3.5-flash-lite`, Gemma 4 fallback on quota limits), before it's trusted — rejected messages are never saved.
-4. Once validated, a second LLM call extracts/updates structured filters and drafts a reply, using recent history + current filters (not the full transcript).
-5. The backend's `ProductProvider` searches Supabase (full-text + filters → top 30 → rerank → top 5); the LLM explains the matches; the UI shows the reply plus product cards.
-6. Users can list, resume, rename, and delete past conversations — all ownership-checked against the JWT.
+1. You sign up or log in. The app gives you a login token so later requests know who you are.
+2. You start a chat and type what you're looking for in everyday language.
+3. Before the app trusts that message, it checks it isn't a prompt-injection attempt (cheap pattern check, then a small LLM "is this safe?" call). Bad messages are rejected and not saved.
+4. If the message is fine, a second LLM call figures out your shopping filters (category, budget, etc.) and drafts a helpful reply, using recent chat context.
+5. The backend searches the product catalog in Supabase and returns a short list of matches plus the assistant's explanation.
+6. You refine ("make it under $50", "black only") and the app updates filters across turns. You can come back later to past chats from the sidebar.
 
-Full design, including the security pipeline and every table's reasoning: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Full design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
-## How to setup?
-
-### Infrastructure at a glance
-
-- **Docker** containerizes the **frontend** and **backend** only, via Docker Compose.
-- **PostgreSQL is hosted on Supabase** — it does not run in Docker, and there is no per-developer local database. Every environment (every developer, CI, the deployed demo) connects to the **same shared Supabase project**.
-- A new developer only needs: install Docker, clone the repo, fill in `.env`, run `docker compose up`. Supabase requires no local setup.
-
-### First-time setup
+## How to setup
 
 ```bash
 cp .env.example .env
-```
-
-Fill in `.env` (get these from whoever manages the team's Supabase project, plus your Google AI Studio API key):
-
-```
-SUPABASE_URL=
-SUPABASE_KEY=
-SUPABASE_DB_URL=      # only needed if you'll run migrations yourself
-GEMMA_API_KEY=
-JWT_SECRET=
-```
-
-If the shared Supabase database isn't already migrated/seeded, do that once (see [Database: migrations & seeding](#database-migrations--seeding) below) — this is a one-time step per environment, not something `docker compose up` does for you.
-
-```bash
+# fill in SUPABASE_URL, SUPABASE_KEY, GEMMA_API_KEY, JWT_SECRET, etc.
 docker compose up
 ```
 
-This starts the Scala backend and the React frontend in matching, pre-configured containers. No need to install Scala, sbt, Node, or Postgres locally.
+- Backend: http://localhost:8080  
+- Frontend: http://localhost:5173  
+- Database: team's hosted Supabase project (not in Docker)
 
-- Backend: http://localhost:8080
-- Frontend: http://localhost:5173
-- Database: your team's hosted Supabase project (not local)
-
-### Daily use
-
-```bash
-docker compose up
-```
-
-Edit code as normal — both backend (`sbt ~run`) and frontend (Vite dev server) auto-reload on save.
-
-Stop with `Ctrl+C`, or in another terminal:
-
-```bash
-docker compose down
-```
+Stop with `Ctrl+C` or `docker compose down`.
 
 ### Added a new library? (Cask, uPickle, an npm package, etc.)
 
@@ -77,54 +41,9 @@ docker compose down
 2. Rebuild once: `docker compose up --build`.
 3. Commit and push the changed file (`build.sbt` or `package.json` + `package-lock.json`).
 
-If you pulled someone else's changes and they added a dependency, run `docker compose up --build` once after `git pull`, then go back to plain `docker compose up`.
+If you pulled someone else's dependency change, run `docker compose up --build` once after `git pull`, then go back to plain `docker compose up`.
 
 **Rule of thumb:** `build.sbt` / `package.json` changed → `--build`. Otherwise → plain `up`.
-
-### Database: migrations & seeding
-
-Because the database is shared and hosted, there is **no `docker compose down -v` to reset it**. Schema changes and data loading are explicit, separate, manual steps:
-
-```bash
-# 1. Apply any new schema migrations (structure only) — do this whenever
-#    you pull a new migration file, or right after writing your own.
-pip install psycopg2-binary
-export SUPABASE_DB_URL=postgresql://postgres:[password]@[host]:5432/postgres
-python data/scripts/apply_migrations.py
-
-# 2. Seed the product catalog from data/clean_products.jsonl — one time per
-#    environment, safe to re-run (idempotent upsert on id), not something you
-#    run on every startup. Produce/refresh the JSONL with
-#    data/scripts/clean_products.py if needed; do not seed from data/raw/.
-pip install supabase
-export SUPABASE_URL=...
-export SUPABASE_KEY=...
-python data/seed/seed_products.py
-```
-
-Rules for the shared dev database (see [`docs/database-schema.md`](docs/database-schema.md#migrations) for the full reasoning):
-
-- Migrations are numbered, structure-only, and forward-only. Whoever writes one applies it to shared dev immediately and posts in the team channel — don't leave it for someone else to guess should run.
-- If a migration breaks shared dev, write a corrective migration (e.g. `005_fix_004.sql`). Never hand-edit the schema via the Supabase dashboard — that causes undetectable schema drift.
-
-### Useful commands
-
-| Command | What it does |
-|---|---|
-| `docker compose up` | Start frontend + backend (build only if no image exists yet) |
-| `docker compose up --build` | Force rebuild — use after dependency changes |
-| `docker compose down` | Stop and remove containers |
-| `docker compose logs backend` | See backend logs only |
-| `docker compose ps` | See what's running |
-| `python data/scripts/apply_migrations.py` | Apply any unapplied schema migrations to Supabase |
-| `python data/seed/seed_products.py` | Seed/refresh the product catalog from `data/clean_products.jsonl` (idempotent) |
-
-### Why this setup
-
-- Everyone gets the same JDK/Scala/sbt/Node versions — no "works on my machine," for the parts Docker owns.
-- One shared Supabase database means everyone sees the same catalog and, eventually, the same test accounts — no schema drift between four separate local Postgres instances.
-- Dependencies (Cask, uPickle, npm packages) are declared once in `build.sbt` / `package.json`, shared via git.
-- Migrations are explicit and tracked (`schema_migrations`), so "what schema is shared dev actually running" is always answerable by reading `data/migrations/`, not by asking around.
 
 ---
 
@@ -178,9 +97,9 @@ scala-shopping-assistant/
 
 ## Architecture
 
-Full write-up (infra, auth, six conversation actions, `ProductProvider`, the two-stage security pipeline, logging): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Full table-by-table schema: [`docs/database-schema.md`](docs/database-schema.md).
+Full write-up: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Schema: [`docs/database-schema.md`](docs/database-schema.md).
 
-Three tiers. React talks only to the Scala API; the Scala API is the only thing that talks to Google AI Studio (Gemini/Gemma) and Supabase. Docker's boundary covers only the first two tiers — Supabase and the LLM API are external, hosted services.
+Three tiers. React talks only to the Scala API; the Scala API is the only thing that talks to Google AI Studio (Gemini/Gemma) and Supabase. Docker covers frontend + backend only — Supabase and the LLM API are external.
 
 ```mermaid
 flowchart TB
@@ -208,20 +127,6 @@ flowchart TB
     BE -.->|reply + products| FE
 ```
 
-### One validated turn, step by step
-
-1. **React** sends the JWT, `sessionId`, and the new message.
-2. **Auth middleware** verifies the JWT and resolves `user_id`; every route touching a conversation checks this `user_id` against the resource's owner **before** anything else runs (IDOR protection).
-3. **Regex pre-filter** rejects obvious prompt-injection patterns outright — no LLM call, nothing saved, reject-on-match (never "strip and continue").
-4. **LLM Call #1 (validation only)** classifies the message as safe or not (`gemini-3.5-flash-lite` primary; falls back to `gemma-4-31b-it` on quota/rate-limit errors). Fail-closed: anything that isn't a clean `{"safe": true}` is treated as unsafe.
-5. Only now is the user's message written to `messages` (with a `filters_snapshot` and `safe: true`).
-6. **LLM Call #2 (assistant)** extracts/updates filters and drafts a response, using `conversation_state.filters` + the last ~6–10 messages (same primary/fallback policy).
-7. **`ProductProvider`** (interface) → **`SupabaseProductProvider`** (impl) runs full-text search + SQL filters on Supabase → top 30 → reranker → top 5. The LLM never writes SQL.
-8. The assistant's turn is saved to `messages`; `conversation_state.filters` is overwritten with the latest values.
-9. React renders the reply and product cards.
-
-This costs roughly 2x LLM latency/tokens per legitimate turn (two sequential LLM calls) — a deliberate trade-off for defense-in-depth, not a guaranteed defense. See `ARCHITECTURE.md` §6 for the full reasoning and the exact rejection/fail-closed rules.
-
 ---
 
 ## Tech choices (quick reference)
@@ -231,7 +136,7 @@ This costs roughly 2x LLM latency/tokens per legitimate turn (two sequential LLM
 | Frontend | React + TypeScript |
 | Backend HTTP | Cask |
 | JSON | uPickle |
-| Auth | JWT, Argon2/bcrypt password hashing |
+| Auth | JWT, Argon2 password hashing |
 | Conversation state | Supabase Postgres — durable `conversations`/`messages`, hot-path `conversation_state`, ephemeral `chat_sessions` |
 | Database | Supabase Postgres — hosted, shared across all environments (not Docker) |
 | Product retrieval | `ProductProvider` interface → `SupabaseProductProvider` |
@@ -239,21 +144,7 @@ This costs roughly 2x LLM latency/tokens per legitimate turn (two sequential LLM
 | Catalog | Cleaned `data/clean_products.jsonl` → seeded into Supabase via `data/seed/seed_products.py` |
 | Logging | Shared logging middleware — `app.log`, `error.log`, `llm.jsonl` (dev only, gitignored) |
 
-## Environment variables
-
-```
-SUPABASE_URL=
-SUPABASE_KEY=
-SUPABASE_DB_URL=
-GEMMA_API_KEY=
-JWT_SECRET=
-FRONTEND_URL=
-BACKEND_URL=
-LOG_LEVEL=INFO
-LLM_LOGGING=true
-```
-
-Never hardcode secrets. `.env.example` documents the shape; `.env` is gitignored.
+---
 
 ## See also
 
