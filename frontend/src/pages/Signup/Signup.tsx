@@ -15,7 +15,7 @@ export default function Signup() {
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
 
   const passwordChecks = [
-    { label: "At least 6 characters", valid: password.length >= 6 },
+    { label: "At least 8 characters", valid: password.length >= 8 },
     { label: "At least one number", valid: /\d/.test(password) },
     { label: "At least one uppercase letter", valid: /[A-Z]/.test(password) },
   ];
@@ -122,7 +122,7 @@ export default function Signup() {
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
+                placeholder="At least 8 characters"
                 disabled={loading}
                   className="auth-input auth-input--with-action"
                   autoComplete="new-password"
