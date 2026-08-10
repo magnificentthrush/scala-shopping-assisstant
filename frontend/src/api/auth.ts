@@ -1,100 +1,51 @@
-// Authentication against our own backend (see docs/authentication.md).
-// USE_MOCK_API mirrors the pattern in api/conversations.ts: while the Scala
-// backend's /api/auth/* endpoints don't exist yet, auth is simulated entirely
-// in localStorage so signup/login keep working end-to-end in the browser.
+// Authentication against our own backend (see docs/authPlan.md §6).
+// The Scala backend's /api/auth/* endpoints are live and verified (steps
+// 1-14), so auth always talks to the real API — no localStorage simulation.
 
 import { apiFetch } from "./client";
 import type { User } from "../types";
 
-const USE_MOCK_API = false;
+// Phase-1 (no email service) fallback: when the backend has no RESEND_API_KEY
+// it returns the raw verification token so the frontend can complete
+// verification without an inbox. VerifyEmail reads this when the URL has no
+// ?token= query param.
+export const PENDING_VERIFICATION_TOKEN_KEY = "pendingVerificationToken";
 
-const MOCK_USERS_KEY = "mock_users";
-
-interface MockUser {
-  id: string;
-  fullName: string;
-  email: string;
-  password: string;
+export function getPendingVerificationToken(): string | null {
+  return localStorage.getItem(PENDING_VERIFICATION_TOKEN_KEY);
 }
 
-function loadMockUsers(): MockUser[] {
-  const raw = localStorage.getItem(MOCK_USERS_KEY);
-  return raw ? JSON.parse(raw) : [];
+export function clearPendingVerificationToken() {
+  localStorage.removeItem(PENDING_VERIFICATION_TOKEN_KEY);
 }
 
-function saveMockUsers(users: MockUser[]) {
-  localStorage.setItem(MOCK_USERS_KEY, JSON.stringify(users));
-}
-
-function toUser(mockUser: MockUser): User {
-  return {
-    id: mockUser.id,
-    fullName: mockUser.fullName,
-    email: mockUser.email,
-  };
-}
-
-export async function register(
-  fullName: string,
-  email: string,
-  password: string,
-) {
-  if (USE_MOCK_API) {
-    const users = loadMockUsers();
-    if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-      throw new Error(
-        "An account with this email already exists. Please log in instead.",
-      );
-    }
-
-    const mockUser: MockUser = {
-      id: crypto.randomUUID(),
-      fullName,
-      email,
-      password,
-    };
-    users.push(mockUser);
-    saveMockUsers(users);
-
-    return { user: toUser(mockUser), needsVerification: true };
-  }
-
-  const data = await apiFetch<{ user: User; token: string }>(
+export async function register(fullName: string, email: string, password: string) {
+  const data = await apiFetch<{ user: User; needsVerification: boolean; verificationToken?: string }>(
     "/api/auth/register",
     {
       method: "POST",
       body: JSON.stringify({ fullName, email, password }),
-    },
+    }
   );
-  saveAuth(data.user, data.token);
-  return { user: data.user, needsVerification: false };
+
+  // Phase-1 fallback: no email service configured means the backend includes
+  // the raw verificationToken for us to use directly. Never treat register as
+  // logged-in — no saveAuth here.
+  if (data.verificationToken) {
+    localStorage.setItem(PENDING_VERIFICATION_TOKEN_KEY, data.verificationToken);
+  }
+
+  return { user: data.user, needsVerification: data.needsVerification };
 }
 
 export async function login(email: string, password: string) {
-  if (USE_MOCK_API) {
-    const users = loadMockUsers();
-    const mockUser = users.find(
-      (u) =>
-        u.email.toLowerCase() === email.toLowerCase() &&
-        u.password === password,
-    );
-    if (!mockUser) {
-      throw new Error("Invalid email or password.");
-    }
-
-    const user = toUser(mockUser);
-    const token = `mock-token-${mockUser.id}`;
-    saveAuth(user, token);
-    return { user, token };
-  }
-
-  const data = await apiFetch<{ user: User; token: string }>(
-    "/api/auth/login",
-    {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    },
-  );
+  // apiFetch throws ApiError with the backend's `code` (e.g. 403
+  // EMAIL_NOT_VERIFIED) — propagate it untouched so Login can show a distinct
+  // "verify your email" message instead of a generic failure.
+  const data = await apiFetch<{ user: User; token: string }>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
   saveAuth(data.user, data.token);
   return { user: data.user, token: data.token };
 }

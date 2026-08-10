@@ -1,12 +1,20 @@
 package assistant.http
 
-/** GET /health — no auth, no DB call. Used by Docker Compose healthchecks
-  * and manual "is the backend up" checks. Deliberately does not touch the
-  * database, so it stays fast and can't itself become a failure point.
+/** Basic liveness endpoints kept separate from auth so `Main` can mount
+  * several `cask.Routes` objects (docs/authPlan.md §7 step 13).
   */
-class HealthRoutes() extends cask.Routes {
+case class HealthRoutes()(implicit
+    cc: castor.Context,
+    log: cask.Logger
+) extends cask.Routes {
+
+  @cask.get("/") //localhost:8080/
+  def index(): ujson.Value =
+    ujson.Obj("message" -> "ShopPilot backend is running")
+
   @cask.get("/health")
-  def health(): ujson.Value = ujson.Obj("status" -> "ok")
+  def health(): ujson.Value =
+    ujson.Obj("status" -> "ok")
 
   initialize()
 }

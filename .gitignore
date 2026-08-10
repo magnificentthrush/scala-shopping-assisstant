@@ -17,3 +17,9 @@ explanation/
 postman/
 .metals/
 .vscode/
+.opencode
+.claude/
+
+
+.bloop/
+metals.sbt

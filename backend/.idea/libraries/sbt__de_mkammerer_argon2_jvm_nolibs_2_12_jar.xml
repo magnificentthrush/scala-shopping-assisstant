@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="sbt: de.mkammerer:argon2-jvm-nolibs:2.12:jar" type="java-imported" external-system-id="SBT">
+    <properties groupId="de.mkammerer" artifactId="argon2-jvm-nolibs" version="2.12" baseVersion="2.12" />
+    <CLASSES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/de/mkammerer/argon2-jvm-nolibs/2.12/argon2-jvm-nolibs-2.12.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/de/mkammerer/argon2-jvm-nolibs/2.12/argon2-jvm-nolibs-2.12-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

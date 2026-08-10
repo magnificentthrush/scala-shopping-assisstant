@@ -1,60 +1,65 @@
 package assistant.config
 
-/** Central place that reads every environment variable the app needs.
+import scala.util.Try
+
+/** Central place to read auth-related environment variables (see
+  * docs/authPlan.md §7 step 5). Every other auth file takes an `AppConfig`
+  * instead of calling `sys.env` directly, so tests can construct one by
+  * hand instead of depending on process environment variables.
   *
-  * Why this exists as its own file: nothing else in the codebase should call
-  * `sys.env` directly. If we ever need to add a new setting, change a
-  * default, or (later) load from a config file instead of env vars, there is
-  * exactly one place to touch. Every other class receives an `AppConfig`
-  * instance instead of reading the environment itself — that also makes
-  * services trivially testable, since a test can build an `AppConfig` by
-  * hand instead of mutating real env vars.
+  * `RESEND_API_KEY` is optional: blank means Phase 1 (no real email;
+  * `emailEnabled` is false — see docs/authPlan.md §1). `JWT_SECRET`,
+  * `SUPABASE_URL`, and `SUPABASE_KEY` are required and fail fast if unset.
   */
 final case class AppConfig(
-    // Direct Postgres connection string, e.g.
-    //   postgresql://user:password@host:5432/postgres
-    // Supabase project settings -> Database -> Connection string -> URI.
-    // NOTE: the project docs describe SUPABASE_URL/SUPABASE_KEY as the app's
-    // client credentials (Supabase's REST/PostgREST API) and reserve
-    // SUPABASE_DB_URL for the migration runner only. This backend instead
-    // talks to Postgres directly over JDBC (the `org.postgresql` driver is
-    // already a project dependency), which is simpler and more idiomatic
-    // for a JVM backend than hand-rolling a PostgREST client. Point
-    // SUPABASE_DB_URL at the same hosted Supabase database either way —
-    // nothing about the schema or the hosting model changes.
-    databaseUrl: String,
-    gemmaApiKey: String,
     jwtSecret: String,
-    frontendUrl: String,
-    backendUrl: String,
-    logLevel: String,
-    llmLogging: Boolean
-)
+    jwtExpiresInHours: Long,
+    supabaseUrl: String,
+    supabaseKey: String,
+    resendApiKey: String,
+    emailFrom: String,
+    frontendUrl: String
+) {
+
+  /** True once Resend is configured. `AuthService` uses this to pick
+    * `ResendEmailService` vs. `NoOpEmailService` and to decide whether
+    * `register`'s response includes the raw `verificationToken` field
+    * (Phase 1 fallback — see docs/authPlan.md §1 "Phased email delivery").
+    */
+  def emailEnabled: Boolean = resendApiKey.trim.nonEmpty
+}
 
 object AppConfig {
+  private val DefaultJwtExpiresInHours = 168L // 7 days — see docs/authPlan.md §2
+  private val DefaultEmailFrom = "noreply@scalainterns.dev"
+  private val DefaultFrontendUrl = "http://localhost:5173"
 
-  /** Reads a required env var or fails fast at startup. We would rather
-    * crash immediately with a clear message than run for an hour and then
-    * NPE deep inside a repository class.
+  private def env(name: String): String = sys.env.getOrElse(name, "")
+
+  private def required(name: String): String = {
+    val value = env(name)
+    if (value.trim.isEmpty) sys.error(s"Set $name in the environment (see .env.example)")
+    value
+  }
+
+  /** Reads every auth-related env var once at startup. Call this from
+    * `Main.scala` and pass the result down — don't call `fromEnv()` from
+    * multiple places, or tests lose the ability to inject a fake config.
     */
-  private def require(name: String): String =
-    sys.env.getOrElse(
-      name,
-      throw new IllegalStateException(
-        s"Missing required environment variable: $name. Check your .env file."
-      )
-    )
-
-  private def optional(name: String, default: String): String =
-    sys.env.getOrElse(name, default)
-
-  def load(): AppConfig = AppConfig(
-    databaseUrl = sys.env.getOrElse("SUPABASE_DB_URL", require("SUPABASE_URL")),
-    gemmaApiKey = require("GEMMA_API_KEY"),
-    jwtSecret = require("JWT_SECRET"),
-    frontendUrl = optional("FRONTEND_URL", "http://localhost:5173"),
-    backendUrl = optional("BACKEND_URL", "http://localhost:8080"),
-    logLevel = optional("LOG_LEVEL", "INFO"),
-    llmLogging = optional("LLM_LOGGING", "true").toBoolean
+  def fromEnv(): AppConfig = AppConfig(
+    jwtSecret = required("JWT_SECRET"),
+    jwtExpiresInHours =
+      Try(env("JWT_EXPIRES_IN_HOURS").trim.toLong).getOrElse(DefaultJwtExpiresInHours),
+    supabaseUrl = required("SUPABASE_URL"),
+    supabaseKey = required("SUPABASE_KEY"),
+    resendApiKey = env("RESEND_API_KEY"),
+    emailFrom = {
+      val value = env("EMAIL_FROM").trim
+      if (value.isEmpty) DefaultEmailFrom else value
+    },
+    frontendUrl = {
+      val value = env("FRONTEND_URL").trim
+      if (value.isEmpty) DefaultFrontendUrl else value
+    }
   )
 }
