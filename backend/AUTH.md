@@ -90,7 +90,7 @@ Domain types (`User.scala`, `NullableOption.scala`) are the data shapes those la
 | `POST /api/auth/register` | Rate-limited. Creates account; `201` with user + `needsVerification` (+ `verificationToken` only when email is off) |
 | `GET /api/auth/verify-email?token=` | Marks email verified; `200 { verified: true }` |
 | `POST /api/auth/login` | Rate-limited. Returns user + JWT when credentials OK and email verified |
-| `OPTIONS` on those paths | Empty `204` so browser CORS preflight works |
+| `OPTIONS` on those paths | Empty `204` so browser CORS preflight works. `verify-email` OPTIONS accepts `token` because Cask binds query params onto the matched handler and preflight reuses the GET URL |
 | On `AuthFailure` | Returns that status + `{ error, code? }` |
 
 ---

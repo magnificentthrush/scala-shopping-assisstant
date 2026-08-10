@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { login } from "../../api/auth";
+import { login, getPendingVerificationToken } from "../../api/auth";
 import { useAuth } from "../../context/AuthContext";
 import { isValidEmail } from "../../utils/validation";
 import BrandLogo from "../../components/BrandLogo/BrandLogo";
@@ -9,6 +9,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function Login() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setNeedsVerification(false);
 
     if (!email || !password) {
       setError("Please fill in both fields.");
@@ -33,11 +35,17 @@ export default function Login() {
       setUser(result.user);
       navigate("/");
     } catch (err: any) {
-      setError(err.message || "Login failed. Please try again.");
+      if (err?.code === "EMAIL_NOT_VERIFIED") {
+        setNeedsVerification(true);
+      } else {
+        setError(err.message || "Login failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
   }
+
+  const canVerifyNow = needsVerification && !!getPendingVerificationToken();
 
   return (
     <div className="auth-screen">
@@ -80,6 +88,17 @@ export default function Login() {
           </div>
 
             {error ? <p className="auth-error" role="alert">{error}</p> : null}
+
+            {needsVerification ? (
+              <div className="auth-error" role="alert">
+                Please verify your email before logging in.{" "}
+                {canVerifyNow ? (
+                  <Link to="/verify-email" className="auth-link">Verify now</Link>
+                ) : (
+                  "Check your inbox for the verification link we sent you."
+                )}
+              </div>
+            ) : null}
 
           <button
             type="submit"
