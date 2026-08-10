@@ -70,7 +70,7 @@ export function getStoredToken(): string | null {
 }
 
 export function isAuthenticated(): boolean {
-  return !!getStoredToken(); //"ad234cxf.." -> return True but if "null", the !!null becomes false (a javaScript trick)
+  return !!getStoredToken();
 }
 
 export async function restoreSession(): Promise<User | null> {

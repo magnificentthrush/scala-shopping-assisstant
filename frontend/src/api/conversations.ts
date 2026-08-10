@@ -4,7 +4,7 @@
 import { apiFetch } from "./client";
 import type { ConversationSummary, Message } from "../types";
 
-const USE_MOCK_API = true;
+const USE_MOCK_API = false;
 
 const CONVOS_KEY = "mock_conversations";
 const MESSAGES_KEY = "mock_messages";
@@ -38,17 +38,27 @@ interface ResumeResponse {
 export async function listConversations(): Promise<ConversationSummary[]> {
   if (USE_MOCK_API) {
     return loadConversations().sort(
-      (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+      (a, b) =>
+        new Date(b.lastMessageAt).getTime() -
+        new Date(a.lastMessageAt).getTime(),
     );
   }
-  const res = await apiFetch<{ conversations: ConversationSummary[] }>("/api/conversations");
+  const res = await apiFetch<{ conversations: ConversationSummary[] }>(
+    "/api/conversations",
+  );
   return res.conversations;
 }
 
 export function registerMockConversation(id: string) {
   const now = new Date().toISOString();
   const list = loadConversations();
-  list.push({ id, title: null, createdAt: now, updatedAt: now, lastMessageAt: now });
+  list.push({
+    id,
+    title: null,
+    createdAt: now,
+    updatedAt: now,
+    lastMessageAt: now,
+  });
   saveConversations(list);
 
   const messagesStore = loadMessagesStore();
@@ -75,7 +85,9 @@ export function appendMockMessages(id: string, newMessages: Message[]) {
   saveMessagesStore(messagesStore);
 }
 
-export async function resumeConversation(conversationId: string): Promise<ResumeResponse> {
+export async function resumeConversation(
+  conversationId: string,
+): Promise<ResumeResponse> {
   if (USE_MOCK_API) {
     const list = loadConversations();
     const messagesStore = loadMessagesStore();
@@ -86,10 +98,16 @@ export async function resumeConversation(conversationId: string): Promise<Resume
       messages: messagesStore[conversationId] || [],
     };
   }
-  return apiFetch<ResumeResponse>(`/api/conversations/${conversationId}/resume`, { method: "POST" });
+  return apiFetch<ResumeResponse>(
+    `/api/conversations/${conversationId}/resume`,
+    { method: "POST" },
+  );
 }
 
-export async function renameConversation(conversationId: string, title: string): Promise<void> {
+export async function renameConversation(
+  conversationId: string,
+  title: string,
+): Promise<void> {
   if (USE_MOCK_API) {
     const list = loadConversations();
     const convo = list.find((c) => c.id === conversationId);
@@ -105,7 +123,9 @@ export async function renameConversation(conversationId: string, title: string):
   });
 }
 
-export async function deleteConversation(conversationId: string): Promise<void> {
+export async function deleteConversation(
+  conversationId: string,
+): Promise<void> {
   if (USE_MOCK_API) {
     const list = loadConversations().filter((c) => c.id !== conversationId);
     saveConversations(list);
