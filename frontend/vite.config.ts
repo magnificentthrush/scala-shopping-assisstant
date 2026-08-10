@@ -7,4 +7,5 @@ export default defineConfig({
   // react() -> React ko samajhne ke liye
   // tailwindcss() -> Tailwind CSS classes ko samajhne ke liye
   plugins: [react(), tailwindcss()],
+  // server: { port: 5173, host: true },
 })
