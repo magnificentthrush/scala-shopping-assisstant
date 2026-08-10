@@ -54,11 +54,7 @@ class AuthRoutes(authService: AuthService, userRepo: UserRepo, jwtSecret: String
     respond(authService.me(userId))(user => ok(writeJs(UserDto.from(user))))
   }
 
-  /** POST /logout — auth required. Auth is stateless JWT (no server-side
-    * session table), so there is nothing to invalidate server-side; this
-    * endpoint exists so the frontend has a single consistent place to hit
-    * before discarding its stored token, and so the action is auditable.
-    */
+ 
   @cask.post("/logout")
   def logout(request: cask.Request): cask.Response[ujson.Value] = handle {
     val userId = Auth.requireUser(request, jwtSecret)

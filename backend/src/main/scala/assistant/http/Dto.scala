@@ -5,15 +5,6 @@ import upickle.default._
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 
-/** Every JSON shape the frontend actually sees, matching API_CONTRACT.md
-  * field-for-field (camelCase on the wire). These are deliberately separate
-  * from the `domain` case classes in `assistant.domain.Models` — a
-  * `Conversation` (domain) has a `userId` field that must NEVER be sent to
-  * the frontend, and `ConversationSummaryDto` (here) simply doesn't have
-  * one, so there is no way to accidentally leak it by forgetting a filter
-  * somewhere. Routes build a Dto FROM a domain object; they never send a
-  * domain object directly.
-  */
 object Dto {
 
   // Instant <-> ISO-8601 string, since JSON has no native date type and
