@@ -1,0 +1,565 @@
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html, body {
+	height: 100%;
+	overflow: hidden;
+}
+
+body {
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	color: var(--vscode-foreground);
+	padding: 12px;
+}
+
+/* ── Active view layout ── */
+
+#active-view {
+	display: flex;
+	flex-direction: column;
+	height: calc(100vh - 24px); /* account for body padding */
+}
+
+.sticky-top {
+	flex-shrink: 0;
+}
+
+/* ── Idle view ── */
+
+.idle-header {
+	margin-bottom: 16px;
+}
+
+.idle-header-label {
+	font-size: 0.7em;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	opacity: 0.5;
+	text-transform: uppercase;
+}
+
+.idle-hero {
+	text-align: center;
+	padding: 24px 12px 20px;
+	background: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 8px;
+	margin-bottom: 16px;
+}
+
+.idle-icon {
+	margin-bottom: 10px;
+}
+
+.idle-text {
+	text-align: center;
+	opacity: 0.6;
+	font-size: 0.95em;
+	font-weight: 500;
+}
+
+.idle-hint {
+	text-align: center;
+	margin-top: 6px;
+	opacity: 0.4;
+	font-size: 0.8em;
+}
+
+.idle-hint code {
+	background: var(--vscode-textCodeBlock-background);
+	padding: 2px 6px;
+	border-radius: 3px;
+}
+
+/* ── Header ── */
+
+.header-label {
+	font-size: 0.7em;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	opacity: 0.5;
+	text-transform: uppercase;
+}
+
+.header-actions {
+	display: flex;
+	gap: 2px;
+}
+
+.icon-btn {
+	background: none;
+	border: none;
+	color: var(--vscode-foreground);
+	cursor: pointer;
+	opacity: 0.5;
+	padding: 3px;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.icon-btn:hover {
+	opacity: 1;
+	background: var(--vscode-toolbar-hoverBackground);
+}
+
+#active-view h2 {
+	font-size: 1.05em;
+	font-weight: 600;
+	margin-bottom: 8px;
+	color: var(--vscode-foreground);
+	letter-spacing: -0.01em;
+}
+
+/* ── Now playing ── */
+
+.now-playing {
+	background: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	padding: 8px 10px;
+	margin-bottom: 10px;
+	position: relative;
+	overflow: hidden;
+}
+
+/* ── Progress bar ── */
+
+.progress-bar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 3px;
+	background: var(--vscode-panel-border);
+}
+
+.progress-fill {
+	height: 100%;
+	background: var(--vscode-progressBar-background);
+	transition: width 0.4s ease;
+	width: 0%;
+	border-radius: 0 2px 2px 0;
+}
+
+.counter {
+	font-size: 0.85em;
+	opacity: 0.6;
+	margin-right: 6px;
+}
+
+.seg-title {
+	font-weight: 700;
+}
+
+.seg-location {
+	display: block;
+	margin-top: 4px;
+	font-size: 0.85em;
+	color: var(--vscode-textLink-foreground);
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.seg-location:hover {
+	text-decoration: underline;
+}
+
+/* ── Playback controls ── */
+
+.controls {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+
+.controls button {
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: none;
+	border-radius: 6px;
+	width: 40px;
+	height: 36px;
+	font-size: 1.1em;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.controls button:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.controls button:active {
+	transform: scale(0.95);
+}
+
+/* ── Play button (circular) ── */
+
+.controls .play-btn {
+	width: 42px;
+	height: 42px;
+	border-radius: 50%;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	box-shadow: 0 0 0 0 var(--vscode-button-background);
+	transition: background 0.15s ease, box-shadow 0.25s ease, transform 0.15s ease;
+}
+
+.controls .play-btn:hover {
+	background: var(--vscode-button-hoverBackground);
+	box-shadow: 0 0 12px 2px color-mix(in srgb, var(--vscode-button-background) 40%, transparent);
+}
+
+.controls .play-btn:active {
+	transform: scale(0.92);
+}
+
+/* ── Play button loading spinner ── */
+
+.controls .play-btn {
+	position: relative;
+}
+
+#btn-play-pause.loading::before {
+	content: "";
+	position: absolute;
+	inset: -5px;
+	border-radius: 50%;
+	border: 2.5px solid color-mix(in srgb, var(--vscode-button-background) 25%, transparent);
+	border-top-color: var(--vscode-button-background);
+	animation: spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes spinner-rotate {
+	to { transform: rotate(360deg); }
+}
+
+#btn-play-pause.loading {
+	animation: none;
+	pointer-events: none;
+	opacity: 0.8;
+}
+
+/* ── Play button pulse animation (glow pulse) ── */
+
+@keyframes play-pulse {
+	0%, 100% {
+		box-shadow: 0 0 0 0 color-mix(in srgb, var(--vscode-button-background) 50%, transparent);
+	}
+	50% {
+		box-shadow: 0 0 16px 4px color-mix(in srgb, var(--vscode-button-background) 30%, transparent);
+	}
+}
+
+#btn-play-pause.pulse {
+	animation: play-pulse 2s ease-in-out infinite;
+}
+
+/* ── Audio controls ── */
+
+.audio-controls {
+	margin-bottom: 10px;
+}
+
+.control-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.control-row .label {
+	font-size: 0.8em;
+	opacity: 0.6;
+	width: 40px;
+	flex-shrink: 0;
+}
+
+.control-row input[type="range"] {
+	flex: 1;
+	height: 4px;
+	accent-color: var(--vscode-focusBorder);
+}
+
+.control-row select {
+	flex: 1;
+	background: var(--vscode-dropdown-background);
+	color: var(--vscode-dropdown-foreground);
+	border: 1px solid var(--vscode-dropdown-border);
+	border-radius: 4px;
+	padding: 3px 6px;
+	font-size: 0.85em;
+}
+
+#btn-mute {
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 1em;
+	padding: 2px;
+	opacity: 0.7;
+	transition: opacity 0.15s ease;
+}
+
+#btn-mute:hover {
+	opacity: 1;
+}
+
+/* ── Speed buttons ── */
+
+.speed-buttons {
+	display: flex;
+	gap: 4px;
+	flex: 1;
+}
+
+.speed-buttons button {
+	flex: 1;
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: none;
+	border-radius: 4px;
+	padding: 3px 6px;
+	font-size: 0.8em;
+	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease;
+}
+
+.speed-buttons button:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.speed-buttons button.active {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+/* ── Explanation ── */
+
+.explanation-box {
+	background: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	padding: 10px;
+	margin-bottom: 10px;
+	max-height: 150px;
+	overflow-y: auto;
+}
+
+.explanation-box:has(.explanation-text:empty) {
+	display: none;
+}
+
+.explanation-text {
+	font-size: 0.9em;
+	line-height: 1.5;
+	transition: opacity 0.15s ease;
+}
+
+.explanation-text.fade-out {
+	opacity: 0;
+}
+
+.explanation-text code {
+	background: var(--vscode-textCodeBlock-background);
+	padding: 1px 4px;
+	border-radius: 3px;
+	font-family: var(--vscode-editor-font-family);
+	font-size: 0.9em;
+}
+
+/* ── Agent hint ── */
+
+.agent-hint {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 10px;
+	padding: 7px 10px;
+	background: var(--vscode-textBlockQuote-background);
+	border-left: 3px solid var(--vscode-textLink-foreground);
+	border-radius: 4px;
+	font-size: 0.8em;
+	color: var(--vscode-descriptionForeground);
+}
+
+.agent-hint-icon {
+	font-size: 1.1em;
+	flex-shrink: 0;
+}
+
+/* ── Outline ── */
+
+.outline {
+	flex: 1;
+	overflow-y: auto;
+	min-height: 0;
+}
+
+.outline h3 {
+	font-size: 0.9em;
+	font-weight: 600;
+	margin-bottom: 8px;
+	opacity: 0.8;
+}
+
+.outline ul {
+	list-style: none;
+}
+
+.outline .marker {
+	width: 16px;
+	text-align: center;
+	flex-shrink: 0;
+}
+
+.outline-segment {
+	list-style: none;
+}
+
+.outline-segment-header {
+	padding: 5px 8px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 0.85em;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	border-left: 3px solid transparent;
+	transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.outline-segment-header:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.outline-segment-header.current {
+	background: color-mix(in srgb, var(--vscode-list-activeSelectionBackground) 40%, transparent);
+	color: var(--vscode-list-activeSelectionForeground);
+	border-left-color: var(--vscode-focusBorder);
+}
+
+.outline-segment-header.completed {
+	opacity: 0.6;
+}
+
+.segment-label {
+	flex: 1;
+	min-width: 0;
+}
+
+.segment-progress {
+	flex-shrink: 0;
+	margin-left: auto;
+	font-size: 0.8em;
+	opacity: 0.55;
+}
+
+.outline-segment-header.current .segment-progress {
+	opacity: 0.7;
+}
+
+
+/* ── Done view ── */
+
+.done-card {
+	text-align: center;
+	margin-top: 40px;
+}
+
+.done-text {
+	font-size: 1.1em;
+	font-weight: 600;
+}
+
+.done-summary {
+	margin-top: 8px;
+	opacity: 0.6;
+}
+
+.done-hint {
+	margin-top: 16px;
+	font-size: 0.85em;
+	opacity: 0.5;
+}
+
+.done-restart-btn {
+	margin-top: 16px;
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: none;
+	border-radius: 6px;
+	padding: 8px 20px;
+	font-size: 0.9em;
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+
+.done-restart-btn:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* ── Header bar ── */
+
+.header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 6px;
+}
+
+/* ── Saved walkthroughs list ── */
+
+.saved-list-title {
+	font-size: 0.75em;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	margin-bottom: 6px;
+	opacity: 0.5;
+}
+
+#saved-list {
+	list-style: none;
+}
+
+.saved-item {
+	padding: 9px 12px;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 0.9em;
+	transition: background 0.15s ease;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.saved-item::before {
+	content: "";
+	display: block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--vscode-textLink-foreground);
+	flex-shrink: 0;
+	opacity: 0.6;
+}
+
+.saved-item:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.saved-item:hover::before {
+	opacity: 1;
+}

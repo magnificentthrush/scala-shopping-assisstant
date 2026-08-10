@@ -8,7 +8,7 @@ case class HealthRoutes()(implicit
     log: cask.Logger
 ) extends cask.Routes {
 
-  @cask.get("/")
+  @cask.get("/") //localhost:8080/
   def index(): ujson.Value =
     ujson.Obj("message" -> "ShopPilot backend is running")
 
