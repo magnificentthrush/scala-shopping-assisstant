@@ -31,7 +31,8 @@ class AuthServiceSpec extends AnyFunSuite with Matchers {
       supabaseKey = "test-key",
       resendApiKey = if (emailEnabled) "re_test_key" else "",
       emailFrom = "noreply@test.dev",
-      frontendUrl = "http://localhost:5173"
+      frontendUrl = "http://localhost:5173",
+      gemmaApiKey = "test-gemma-key"
     )
 
   private val phase1 = config(emailEnabled = false)

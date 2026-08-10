@@ -178,6 +178,81 @@ Plus the pre-existing catalog/health routes:
 
 Turn 2 is correct: the budget update applies to the shared conversation, not to `session-B` in isolation. `messages.filters_snapshot` on each row still records what filters were believed **after that turn** for audit; `conversation_state` holds **now**.
 
+### One response shape, modes, and progressive shopping (multi-turn)
+
+There is **one** successful chat endpoint: `POST /api/sessions/{sessionId}/messages`. There is no separate “suggestions” API. After Call #1 passes and Call #2 finishes, every successful turn returns the **same JSON shape** (see [`API_CONTRACT.md`](API_CONTRACT.md) Messages):
+
+| Field | Role |
+| --- | --- |
+| `mode` | How the UI should render this turn (`recommend` / `clarify` / `info` / `other`) |
+| `reply` | Assistant text shown in the bubble (also mirrored on `assistantMessage.content`) |
+| `followUpQuestion` | Optional; mainly for `clarify` |
+| `products` | Product cards for this turn — may be `[]` (empty is normal, not an error) |
+| `userMessage` / `assistantMessage` | The two durable bubbles to append (ids, roles, `sequenceNumber`) |
+| `sessionId` / `conversationId` | Runtime handle + durable conversation |
+
+**Rejected turns are different:** regex or Call #1 failure → `422 { code: "REJECTED" }`. No `mode`, no products, nothing written to history.
+
+#### What each `mode` means
+
+| `mode` | When Call #2 chooses it | Typical `products` | UI |
+| --- | --- | --- | --- |
+| `recommend` | Enough filters to search the catalog (or search ran and found nothing useful) | Top results, or `[]` with a reply that suggests relaxing a filter | Show reply + product cards |
+| `clarify` | Not enough to search meaningfully yet (e.g. “I want shoes” / “any suggestions?” with no category or constraints) | Usually `[]` | Show reply and/or `followUpQuestion`; ask one useful question |
+| `info` | Shopping-related talk that does not need a catalog hit (definitions, thanks, how-to) | `[]` | Show reply only |
+| `other` | Off-script / edge shopping cases that still get a text reply | Usually `[]` | Show reply only |
+
+“Suggestions” in everyday language maps to **`clarify`** (ask what they need) or **`recommend`** (show product cards) — still the same endpoint and response shape. The frontend branches on `mode`, not on a different URL.
+
+#### Progressive refinement (same conversation)
+
+Short follow-ups work because each Call #2 receives:
+
+1. **`conversation_state.filters`** — the structured “wishlist so far” (cheap, current-only), and
+2. the last **~6–10** raw `messages`, plus the new user text.
+
+Call #2 **merges** the new utterance into the filters (it does not start from an empty wishlist unless this is the first accepted turn). After a successful assistant turn, the backend overwrites `conversation_state.filters` with the merged result and stores a `filters_snapshot` on the message row for audit.
+
+**Worked example — one session, three turns**
+
+| Turn | User says | Filters after Call #2 (illustrative) | Likely `mode` | What the user sees |
+| --- | --- | --- | --- | --- |
+| 1 | “I want shoes” | `{ "category": "shoes" }` | Often `clarify` (ask color/budget), or broad `recommend` | Question and/or a first product set |
+| 2 | “red” | `{ "category": "shoes", "attributes": { "color": "red" } }` | Usually `recommend` | Updated cards; user did not need to repeat “shoes” |
+| 3 | “under 200 dollars” | `{ "category": "shoes", "attributes": { "color": "red" }, "budget": 200 }` | `recommend` | New search with merged budget |
+
+Same merge path as the two-session budget example above; here it is simply three messages on one `sessionId`. Correcting a wrong inference (“actually make it under $150”) is also a normal follow-up merge — there is no separate confirmation gate before search (see §5).
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant BE as Backend
+    participant St as conversation_state
+    participant LLM as Call2
+    participant PP as ProductProvider
+
+    U->>BE: I want shoes
+    BE->>LLM: empty filters + message
+    LLM-->>BE: mode clarify or recommend, filters category shoes
+    BE->>St: save filters
+    BE-->>U: reply, products maybe empty
+
+    U->>BE: red
+    BE->>St: load filters
+    BE->>LLM: prior filters + recent messages + red
+    LLM-->>BE: merged color red, mode recommend
+    BE->>PP: search merged filters
+    BE->>St: update filters
+    BE-->>U: reply + products
+
+    U->>BE: under 200 dollars
+    BE->>St: load filters
+    BE->>LLM: merge budget 200
+    BE->>PP: search again
+    BE->>St: update filters
+    BE-->>U: reply + updated products
+```
+
 ### Two-phase persistence (Call #1 commit, then Call #2)
 
 Do **not** wait for Call #2 before creating the conversation / saving the user message. After Call #1 returns `safe:true`:
@@ -290,7 +365,7 @@ The LLM's job is understanding language and writing language. It is never asked 
 
 ### Filter transparency vs. a confirmation gate
 
-**Decision:** every `recommend` turn returns the resolved filters (as a short human-readable summary in `reply`) **together with** the product results, in the same response. There is no separate "show filters → wait for the user to say yes → then search" step, and no extra `mode` value for it — only the two that already exist, `recommend` and `clarify`.
+**Decision:** every `recommend` turn returns the resolved filters (as a short human-readable summary in `reply`) **together with** the product results, in the same response. There is no separate "show filters → wait for the user to say yes → then search" step, and no extra `mode` value for confirmation — the contracted modes remain `recommend`, `clarify`, `info`, and `other` (see §4 "One response shape, modes, and progressive shopping").
 
 **Why not gate search behind an explicit confirmation step:**
 
