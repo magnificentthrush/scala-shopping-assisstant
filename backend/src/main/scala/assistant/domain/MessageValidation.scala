@@ -26,3 +26,10 @@ case class ValidationPassResponse(safe: Boolean, sessionId: String, message: Str
 object ValidationPassResponse {
   implicit val rw: ReadWriter[ValidationPassResponse] = macroRW
 }
+
+/** Failure returned by `MessageValidationService` — routes map
+  * `status`/`error`/`code` straight onto the HTTP response / `ErrorBody`
+  * (e.g. `400` blank message, `422` with `code: "REJECTED"`). Internal
+  * control-flow type: never serialized directly, so no `ReadWriter`.
+  */
+final case class ValidationFailure(status: Int, error: String, code: Option[String])
