@@ -23,9 +23,15 @@ export async function apiFetch<T>(
   const token = getToken();
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
+
+  // Only set Content-Type when sending a body. Putting it on GET forces a
+  // CORS preflight; Cask's OPTIONS handlers must then accept the same query
+  // params as the real route (see AuthRoutes.verifyEmailOptions).
+  if (options.body != null && headers["Content-Type"] === undefined) {
+    headers["Content-Type"] = "application/json";
+  }
 
   const isPublicRoute = path.startsWith("/api/auth") || path === "/health";
   if (token && !isPublicRoute) {

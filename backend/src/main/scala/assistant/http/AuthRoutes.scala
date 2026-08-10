@@ -28,8 +28,10 @@ case class AuthRoutes(auth: AuthService)(implicit
   @cask.route("/api/auth/login", methods = Seq("options"))
   def loginOptions(): cask.Response.Raw = noContent()
 
+  // Cask binds query params onto the matched handler. Preflight reuses the
+  // same URL as GET (including ?token=...), so this signature must accept it.
   @cask.route("/api/auth/verify-email", methods = Seq("options"))
-  def verifyEmailOptions(): cask.Response.Raw = noContent()
+  def verifyEmailOptions(token: String = ""): cask.Response.Raw = noContent()
 
   // --- Auth endpoints ---
 
@@ -77,7 +79,7 @@ case class AuthRoutes(auth: AuthService)(implicit
         }
     }
 
-  private def parseBody[T: upickle.default.Reader](
+  private def parseBody[T: upickle.default.Reader](  // T-> can be anyObject, like in User.scala we have RegistereRequest and LoginRequest
       request: cask.Request
   ): Either[AuthFailure, T] =
     try Right(read[T](request.text()))
