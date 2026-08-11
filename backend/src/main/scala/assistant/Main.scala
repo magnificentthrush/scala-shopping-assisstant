@@ -10,10 +10,12 @@ import assistant.repo.{
   ConversationRepo,
   ConversationStateRepo,
   MessageRepo,
+  SupabaseProductProvider,
   SupabaseRestClient,
   UserRepo
 }
 import assistant.services.{
+  AssistantService,
   AuthService,
   ConversationService,
   EmailService,
@@ -43,11 +45,20 @@ object Main extends cask.Main {
   // Call #2 (assistant) later (docs/call1Plan.md §2, §7 step 8).
   private val llmClient = new GeminiLLMClient(config.gemmaApiKey)
   private val messageValidationService = new MessageValidationService(llmClient)
+  private val conversationStateRepo = new ConversationStateRepo(rest)
+  private val messageRepo = new MessageRepo(rest)
   private val conversationService = new ConversationService(
     chatSessions = new ChatSessionRepo(rest),
     conversations = new ConversationRepo(rest),
-    conversationStates = new ConversationStateRepo(rest),
-    messages = new MessageRepo(rest)
+    conversationStates = conversationStateRepo,
+    messages = messageRepo
+  )
+  private val productProvider = new SupabaseProductProvider(rest)
+  private val assistantService = new AssistantService(
+    llmClient,
+    productProvider,
+    conversationStateRepo,
+    messageRepo
   )
 
   override def mainDecorators: Seq[cask.RawDecorator] =
@@ -57,7 +68,7 @@ object Main extends cask.Main {
     Seq(
       HealthRoutes(),
       AuthRoutes(authService),
-      MessageRoutes(jwt, messageValidationService, conversationService),
+      MessageRoutes(jwt, messageValidationService, conversationService, assistantService),
       ConversationRoutes(jwt, conversationService)
     )
 

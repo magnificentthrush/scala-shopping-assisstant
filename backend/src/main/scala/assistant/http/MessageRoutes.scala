@@ -2,26 +2,21 @@ package assistant.http
 
 import assistant.auth.authed
 import assistant.auth.JwtService
-import assistant.domain.{SendMessageRequest, ValidationFailure, ValidationPassResponse}
-import assistant.services.{ConversationService, MessageValidationService}
+import assistant.domain.{SendMessageRequest, SendMessageResponse, ValidationFailure}
+import assistant.services.{AssistantService, ConversationService, MessageValidationService}
 import upickle.default.{read, writeJs}
 
 /** Thin HTTP layer for the chat message endpoint (docs/conversationPlan.md
-  * §7, §8 task 10). Parses the body, runs the regex pre-filter → Call #1
-  * (`MessageValidationService`), then commits the approved message
-  * (`ConversationService.commitUserTurn`) and returns the §6 extended
-  * pass body — the same `Either`→status+JSON pattern as `AuthRoutes`.
-  *
-  * `POST /api/sessions/{sessionId}/messages`: blank/regex/unsafe → `400` or
-  * `422 REJECTED` (nothing written); ownership failures from
-  * `commitUserTurn` → `403 FORBIDDEN` / `404 SESSION_NOT_FOUND`; success →
-  * `200` with `conversationId` + the persisted `userMessage`. A valid JWT is
-  * required via `@authed`.
+  * §7, docs/call2Plan.md §4 & §8). Parses the body, runs the regex pre-filter → Call #1
+  * (`MessageValidationService`), commits the approved message
+  * (`ConversationService.commitUserTurn`), and invokes Call #2 (`AssistantService`)
+  * to return the full SendMessageResponse target shape.
   */
 case class MessageRoutes(
     jwt: JwtService,
     validation: MessageValidationService,
-    conversations: ConversationService
+    conversations: ConversationService,
+    assistant: AssistantService
 )(implicit
     cc: castor.Context,
     log: cask.Logger
@@ -46,18 +41,25 @@ case class MessageRoutes(
             conversations.commitUserTurn(sessionId, userId, req.message) match {
               case Left(failure) => errorJson(failure)
               case Right(turn) =>
-                json(
-                  200,
-                  writeJs(
-                    ValidationPassResponse(
-                      safe = true,
-                      sessionId = sessionId,
-                      conversationId = turn.conversationId,
-                      message = req.message,
-                      userMessage = turn.userMessage
+                assistant.respond(turn.conversationId, req.message) match {
+                  case Left(failure) => errorJson(failure)
+                  case Right(assistantTurn) =>
+                    json(
+                      200,
+                      writeJs(
+                        SendMessageResponse(
+                          sessionId = sessionId,
+                          conversationId = turn.conversationId,
+                          mode = assistantTurn.mode,
+                          reply = assistantTurn.reply,
+                          followUpQuestion = assistantTurn.followUpQuestion,
+                          products = assistantTurn.products,
+                          userMessage = turn.userMessage,
+                          assistantMessage = assistantTurn.assistantMessage
+                        )
+                      )
                     )
-                  )
-                )
+                }
             }
         }
     }
