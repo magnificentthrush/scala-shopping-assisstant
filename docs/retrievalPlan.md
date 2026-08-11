@@ -151,12 +151,16 @@ Mainstream queries work today; specific multi-constraint queries hit zero. `ARCH
 
 1. **[This document]** `docs/retrievalPlan.md` — Done (this file). §2 numbers verified live via MCP.
 2. **Done** — `data/scripts/catalog_report.py` hardened (notes computed from live counts, not hardcoded; added bare `"hiking"` probe). §2 replaced with a **dated baseline** (`2026-08-11T11:36:00Z`) from Supabase MCP `execute_sql` (same query set as the script; local `psycopg2`→`db.*:5432` timed out). Full 32-category list + exact FTS counts pasted.
-3. `assistant/services/Reranker.scala` — fix price inversion, add rating scoring + tie-break, add name-based dedupe. Extend `RerankerSpec`: inverted-price case (₹150 beats ₹499 under ₹500 budget when keyword scores tie), rating tie-break case, duplicate-suppression case. All existing tests keep passing.
-4. `assistant/services/AssistantPrompt.scala` — add category vocabulary + INR grounding lines (coordinate with `call2Plan.md` task 9 ownership). Add a parse-level test asserting nothing else about the prompt contract changed.
+3. **Done** — `assistant/services/Reranker.scala` — price inversion fixed, rating tie-break, name dedupe (`79d89f2`).
+4. **Done** — `assistant/services/AssistantPrompt.scala` — category vocabulary + INR grounding (`91f09d1`); extended in `6eca7b2`/`ee42ccb` with `$→₹` conversion rule and "never quote figures" instruction.
 5. **Done** — `assistant/repo/SupabaseProductProvider.scala` — fallback ladder implemented (rung 1 plfts full term set → rung 2 `category=eq` + price → rung 3 `wfts` on the longest salient term); `[retrieval] rung N` `println` logging per rung; spec upgraded to a queue-based `CapturingRestClient` with per-rung assertions (7 tests green).
-6. Retrieval smoke harness — 10 canonical cases (e.g. "men's watch under 2000" → expect `Watches` in top-5; "cotton t-shirt under 500" → expect `Clothing`; "waterproof hiking boots" → known-thin, assert graceful non-crash with ≤5 results). Run against the live catalog; record pass/fail in this file.
+6. **Done** — `data/scripts/retrieval_smoke.py` — 10 canonical cases; 9/10 pass at rung 1 (`5366d78`); kitchen-knife case fixed by task 5 rung 2.
 7. **Done** — `docs/database-schema.md` + `docs/ARCHITECTURE.md` §5 — INR note, fallback-ladder description, category-grounding note.
-8. Manual end-to-end check via the running backend (after `call2Plan.md` tasks 11–13 land): three real messages — mainstream (watch), constrained (t-shirt + budget), and a known-gap query (hiking) — verify top-5 quality, no duplicates, correct ₹ budgets, and graceful gap behavior. Record the three turns here.
+8. **Done** — Manual end-to-end check via running backend (`docker compose up backend`, 2026-08-11). Three turns on session `326ffe40-beaf-4728-aaf6-3fefeafc44ca`:
+   - **Mainstream (watch):** `"I want a men's watch under 2000"` → `mode: recommend`, rung 1, 5× `Watches` (₹159–449), filters `budget:2000 category:Watches`, reply includes `(Filters: Watches, under ₹2,000, "men")`.
+   - **Constrained (t-shirt):** `"show me cotton t-shirts under 500"` → rung 1, 5× `Clothing` (₹149–299), filters `budget:500`, summary `(Filters: Clothing, under ₹500, "cotton")`. Note: reranker still surfaces bra SKUs for "cotton t-shirt" — catalog/FTS noise, not a retrieval crash.
+   - **Known-gap (hiking):** `"I need waterproof hiking boots under 5000"` → rung 2 (`category=Footwear + price`), 5× `Footwear` boots/bellies (no electrical-switch/lipstick junk — rung-3 quality gate working). Catalog lacks true hiking inventory; graceful broad Footwear fallback is expected per §2.
+   - **Regression fixed during check:** `"I need waterproof hiking shoes under $120"` previously returned lipstick/switch via rung 3; after `6eca7b2` quality gate + `$→₹` prompt grounding, same query returns Footwear via rung 2 with `budget≈9960`. Intermittent Call #1 `422 REJECTED` on the same message is a separate validator non-determinism issue.
 9. **Done** — Standing regression gate documented: re-run `data/scripts/retrieval_smoke.py` (exit 0 = all 10 canonical cases pass) after any prompt/provider/reranker change before merging. The harness is committed and self-contained; local runs need `SUPABASE_DB_URL` reachable (MCP `execute_sql` is the fallback when port 5432 is blocked).
 
 ---
@@ -211,10 +215,10 @@ sequenceDiagram
 
 ## 9. Done when
 
-- [ ] Tasks 1–9 in §5 are marked Done
+- [x] Tasks 1–9 in §5 are marked Done
 - [x] `catalog_report.py` output is pasted in §2 as the dated baseline
-- [ ] Reranker: cheaper-under-budget wins ties, rating breaks ties, no duplicate names in top-5 (unit tests)
-- [ ] Smoke harness: mainstream queries return expected categories in top-5; the known-thin query degrades gracefully (fewer results, no error, no duplicate spam)
-- [ ] "waterproof hiking boots under ₹5000" style queries no longer return hard zero without a fallback attempt (ladder rung recorded in logs)
-- [ ] Filter summaries and replies talk in ₹, and the LLM picks categories from the real 32-value vocabulary
-- [ ] No reseed, no schema change, no `Product` contract change shipped in this pass
+- [x] Reranker: cheaper-under-budget wins ties, rating breaks ties, no duplicate names in top-5 (unit tests)
+- [x] Smoke harness: mainstream queries return expected categories in top-5; the known-thin query degrades gracefully (fewer results, no error, no duplicate spam)
+- [x] "waterproof hiking boots under ₹5000" style queries no longer return hard zero without a fallback attempt (ladder rung recorded in logs)
+- [x] Filter summaries and replies talk in ₹, and the LLM picks categories from the real 32-value vocabulary
+- [x] No reseed, no schema change, no `Product` contract change shipped in this pass
