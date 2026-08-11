@@ -60,6 +60,37 @@ class MessageRepo(client: SupabaseRestClient) {
     )
     read[Seq[MessageRow]](json)
   }
+
+  /** The most recent `limit` messages for a conversation, ordered chronologically (oldest-first).
+    */
+  def recent(conversationId: String, limit: Int = 8): Seq[MessageRow] = {
+    val json = client.get(
+      Table,
+      Map(
+        "conversation_id" -> s"eq.$conversationId",
+        "order" -> "sequence_number.desc",
+        "limit" -> limit.toString
+      )
+    )
+    read[Seq[MessageRow]](json).reverse
+  }
+
+  /** Inserts the assistant's turn and updates conversation_state.filters atomically via
+    * the `commit_assistant_turn` Postgres function (migration 009).
+    */
+  def insertAssistantMessage(conversationId: String, content: String, filters: ujson.Value): MessageRow = {
+    val body = ujson.Obj(
+      "p_conversation_id" -> conversationId,
+      "p_content" -> content,
+      "p_filters" -> filters
+    ).render()
+    val json = client.rpc("commit_assistant_turn", body)
+    read[Seq[MessageRow]](json).headOption.getOrElse(
+      throw new RuntimeException(
+        s"commit_assistant_turn RPC returned no row for conversation $conversationId"
+      )
+    )
+  }
 }
 
 object MessageRepo {

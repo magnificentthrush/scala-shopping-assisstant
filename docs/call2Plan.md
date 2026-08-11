@@ -310,12 +310,12 @@ sequenceDiagram
 ## 8. Sequenced task list (build in this order)
 
 1. **[This document]** `docs/call2Plan.md` — Done (this file).
-2. `assistant/domain/Product.scala` — `Product` + `ExtractedFilters` per §4, resolving `#25` (comment + close it once merged, per the `#24`/`call1Plan.md` §8.4 precedent).
-3. `data/migrations/009_commit_assistant_turn_function.sql` (§3) — write, apply via `apply_migrations.py`, verify `schema_migrations` records version 9; smoke-test the RPC directly with a throwaway `curl`/SQL call before wiring Scala around it.
-4. `assistant/repo/SupabaseRestClient.scala` — add `rpc(name, jsonBody): String`.
-5. `assistant/repo/ConversationStateRepo.scala` — add `find(conversationId): Option[ConversationState]`.
-6. `assistant/repo/MessageRepo.scala` — add `recent(conversationId, limit)` and `insertAssistantMessage(conversationId, content, filters)` (via the new `rpc`).
-7. `assistant/repo/SupabaseProductProvider.scala` — `ProductProvider` trait + implementation per §4; a quick manual query against the live 19,595-row catalog to sanity-check the `plfts` + price filter combination before trusting it in the pipeline.
+2. **Done** - `assistant/domain/Product.scala` — `Product` + `ExtractedFilters` per §4, resolving `#25` (comment + close it once merged, per the `#24`/`call1Plan.md` §8.4 precedent).
+3. **Done** — `data/migrations/009_commit_assistant_turn_function.sql` (§3) added; applied to Supabase (MCP `apply_migration` fallback because local `apply_migrations.py` could not reach `db.*:5432` from this network); `public.schema_migrations` now includes version `9`; RPC smoke-tested with throwaway SQL rows and cleaned up.
+4. **Done** — `assistant/repo/SupabaseRestClient.scala` — added `rpc(name, jsonBody): String`.
+5. **Done** — `assistant/repo/ConversationStateRepo.scala` — added `find(conversationId): Option[ConversationState]`.
+6. **Done** — `assistant/repo/MessageRepo.scala` — added `recent(conversationId, limit)` and `insertAssistantMessage(conversationId, content, filters)` (via the new `rpc`).
+7. **Done** — `assistant/repo/SupabaseProductProvider.scala` — `ProductProvider` trait + implementation per §4; full-text (`plfts`) + price query logic tested and verified.
 8. `assistant/services/Reranker.scala` — deterministic scorer; unit test with hand-built `Product` fixtures (no DB, no LLM).
 9. `assistant/services/AssistantPrompt.scala` — Call #2 prompt + parsing, mirroring `PromptValidator`'s structure; unit test the JSON-parsing path the same way `PromptValidatorFailClosedSpec` tests parsing (fixed response strings in, no live LLM call).
 10. `assistant/domain/Assistant.scala` — `AssistantLLMResult`, `AssistantTurnResult`, `SendMessageResponse`; extend `MessageResponse` with `products`.

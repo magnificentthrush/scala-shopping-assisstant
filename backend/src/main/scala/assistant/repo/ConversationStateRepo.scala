@@ -13,6 +13,13 @@ import upickle.default._
 class ConversationStateRepo(client: SupabaseRestClient) {
   private val Table: String = "conversation_state"
 
+  /** Fetches the conversation state row for the given `conversationId`, if it exists.
+    */
+  def find(conversationId: String): Option[ConversationState] = {
+    val json = client.get(Table, Map("conversation_id" -> s"eq.$conversationId"))
+    read[Seq[ConversationState]](json).headOption
+  }
+
   /** Lazy-create step: the DB fills in `filters` (`default '{}'`) and
     * `updated_at` (`default now()`), so only `conversation_id` is sent.
     */
