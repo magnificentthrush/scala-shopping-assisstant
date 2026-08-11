@@ -1,14 +1,9 @@
 package assistant.http
 
-/** Basic liveness endpoints kept separate from auth so `Main` can mount
-  * several `cask.Routes` objects (docs/authPlan.md §7 step 13).
-  */
-case class HealthRoutes()(implicit
-    cc: castor.Context,
-    log: cask.Logger
-) extends cask.Routes {
+/** Simple health checks, separate from auth/chat routes. */
+class HealthRoutes() extends cask.Routes {
 
-  @cask.get("/") //localhost:8080/
+  @cask.get("/")
   def index(): ujson.Value =
     ujson.Obj("message" -> "ShopPilot backend is running")
 
@@ -17,4 +12,8 @@ case class HealthRoutes()(implicit
     ujson.Obj("status" -> "ok")
 
   initialize()
+}
+
+object HealthRoutes {
+  def apply(): HealthRoutes = new HealthRoutes()
 }
