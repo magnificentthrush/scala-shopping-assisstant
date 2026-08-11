@@ -1,7 +1,5 @@
-# Local-only for now — not pushing migrations/scripts/seed to main yet
-migrations/
-seed/
-*.sql
+# Python bytecode cache only — migrations/scripts/seed are tracked (see
+# docs/database-schema.md §Migrations: the shared Supabase project needs
+# these files in git so every developer/intern can see and apply them).
 /scripts/__pycache__
-*migrations*
 *test*

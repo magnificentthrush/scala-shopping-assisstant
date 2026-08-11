@@ -182,7 +182,7 @@ One row per conversation — current filters only (e.g. `{"category": "hiking sh
 ```sql
 CREATE TABLE chat_sessions (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_active_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -190,7 +190,7 @@ CREATE TABLE chat_sessions (
 );
 ```
 
-The ephemeral runtime handle — one row per active connection/tab. The `sessionId` the frontend sends on `POST /api/sessions/{sessionId}/messages` is a `chat_sessions.id`. Starting a new chat creates this session handle first, and the durable `conversations` row is created only when the first message is accepted. Resuming a past conversation (`POST /api/conversations/{conversationId}/resume`) creates a **new** row here pointing at the **same** `conversation_id`; it never creates a new conversation and never touches `messages` or `conversation_state`. `expires_at` is nullable and reserved for a future cleanup job — nothing reads it yet.
+`conversation_id` is nullable — `003_add_messages_and_state.sql` originally made it `NOT NULL`, which made lazy-create impossible; `008_chat_sessions_conversation_id_nullable.sql` is the corrective, forward-only fix (see [`conversationPlan.md`](conversationPlan.md) §2). The ephemeral runtime handle — one row per active connection/tab. The `sessionId` the frontend sends on `POST /api/sessions/{sessionId}/messages` is a `chat_sessions.id`. Starting a new chat creates this session handle first, and the durable `conversations` row is created only when the first message is accepted. Resuming a past conversation (`POST /api/conversations/{conversationId}/resume`) creates a **new** row here pointing at the **same** `conversation_id`; it never creates a new conversation and never touches `messages` or `conversation_state`. `expires_at` is nullable and reserved for a future cleanup job — nothing reads it yet.
 
 ### Indexes
 
@@ -228,8 +228,12 @@ data/migrations/
 ├── 003_add_messages_and_state.sql
 ├── 004_add_indexes.sql
 ├── 005_products_readonly_rls.sql
-└── 006_drop_messages_safe.sql
+├── 006_drop_messages_safe.sql
+├── 007_add_email_verification_to_users.sql
+└── 008_chat_sessions_conversation_id_nullable.sql
 ```
+
+These files (and `data/scripts/apply_migrations.py`) are tracked in git — every developer needs them to see what's already applied to the shared database and to apply new ones themselves (see [`conversationPlan.md`](conversationPlan.md) for the migration/gitignore correction that made this true; they were previously, incorrectly, gitignored as "local-only").
 
 Applied with `data/scripts/apply_migrations.py` (requires `SUPABASE_DB_URL`, a direct Postgres connection string — different from the `SUPABASE_URL`/`SUPABASE_KEY` client credentials the app uses). The runner reads each file, checks whether its version is already in `schema_migrations`, and if not, runs it and records the version — all in one transaction per file.
 
