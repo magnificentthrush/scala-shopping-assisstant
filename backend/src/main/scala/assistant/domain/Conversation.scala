@@ -30,7 +30,7 @@ object Conversation {
   */
 case class ConversationState(
     @key("conversation_id") conversationId: String,
-    filters: String,
+    filters: ujson.Value,
     @key("updated_at") updatedAt: String
 )
 

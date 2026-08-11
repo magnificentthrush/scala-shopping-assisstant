@@ -24,9 +24,15 @@ class ChatSessionRepo(client: SupabaseRestClient) {
   }
 
   def findById(sessionId: String): Option[ChatSession] = {
-    val json = client.get(Table, Map("id" -> s"eq.$sessionId"))
-    read[Seq[ChatSession]](json).headOption
+    if (!isValidUuid(sessionId)) None
+    else {
+      val json = client.get(Table, Map("id" -> s"eq.$sessionId"))
+      read[Seq[ChatSession]](json).headOption
+    }
   }
+
+  private def isValidUuid(s: String): Boolean =
+    scala.util.Try(java.util.UUID.fromString(s)).isSuccess
 
   /** Points a session at its (now-created) conversation — lazy-create step.
     * Does not recurse/race-protect: checked-then-insert is the documented

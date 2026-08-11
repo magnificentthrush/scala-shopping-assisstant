@@ -39,12 +39,12 @@ case class ConversationRoutes(jwt: JwtService, conversations: ConversationServic
 
   @authed(jwt)
   @cask.post("/api/conversations")
-  def start(userId: String): cask.Response.Raw =
+  def start()(userId: String): cask.Response.Raw =
     json(201, writeJs(conversations.start(userId)))
 
   @authed(jwt)
   @cask.get("/api/conversations")
-  def list(userId: String): cask.Response.Raw =
+  def list()(userId: String): cask.Response.Raw =
     json(200, writeJs(conversations.list(userId)))
 
   @authed(jwt)

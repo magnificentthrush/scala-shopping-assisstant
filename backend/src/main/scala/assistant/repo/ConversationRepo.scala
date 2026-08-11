@@ -27,9 +27,15 @@ class ConversationRepo(client: SupabaseRestClient) {
   }
 
   def findById(conversationId: String): Option[Conversation] = {
-    val json = client.get(Table, Map("id" -> s"eq.$conversationId"))
-    read[Seq[Conversation]](json).headOption
+    if (!isValidUuid(conversationId)) None
+    else {
+      val json = client.get(Table, Map("id" -> s"eq.$conversationId"))
+      read[Seq[Conversation]](json).headOption
+    }
   }
+
+  private def isValidUuid(s: String): Boolean =
+    scala.util.Try(java.util.UUID.fromString(s)).isSuccess
 
   /** Sidebar history for one user, most recently active first — served by the
     * `conversations_last_message_at_idx` index (docs/database-schema.md §Indexes).
