@@ -123,4 +123,18 @@ class AssistantPromptSpec extends AnyFunSuite with Matchers {
     result.filters.keywords shouldBe List("running")
     result.filters.attributes shouldBe Map("size" -> "9")
   }
+
+  test("parses pendingAction accept/reject, defaults to None, ignores junk values") {
+    val base =
+      """{ "mode": "recommend", "filters": {}, "assistantResponse": "Here you go.", "pendingAction": %s }"""
+
+    AssistantPrompt.parse(base.format("\"accept\"")).pendingAction shouldBe Some("accept")
+    AssistantPrompt.parse(base.format("\"reject\"")).pendingAction shouldBe Some("reject")
+    AssistantPrompt.parse(base.format("null")).pendingAction shouldBe None
+    AssistantPrompt.parse(base.format("\"maybe\"")).pendingAction shouldBe None
+
+    // Missing entirely (older model output) also defaults to None.
+    val legacy = """{ "mode": "recommend", "filters": {}, "assistantResponse": "Here you go." }"""
+    AssistantPrompt.parse(legacy).pendingAction shouldBe None
+  }
 }

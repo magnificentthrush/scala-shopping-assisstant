@@ -9,6 +9,11 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Try
 
+/** Describes a no-match offer currently awaiting the user's confirmation, so Call #2 can
+  * classify the latest message as accept/reject.
+  */
+case class PendingOfferContext(suggestion: String, filtersSummary: String)
+
 /** Call #2 — LLM filter extraction, response drafting, and mode selection (docs/ARCHITECTURE.md §6, docs/call2Plan.md §4).
   *
   * Prompt is independently hardened. Parse errors or LLM API timeouts throw exceptions
@@ -77,6 +82,8 @@ object AssistantPrompt {
       |
       |OUTPUT FORMAT:
       |Respond ONLY with a valid JSON object matching this exact shape, with no markdown code fences or extra prose.
+      |Always include the "pendingAction" field: set it to "accept" or "reject" only when a PENDING OFFER section
+      |below tells you there is an outstanding offer; otherwise output "pendingAction": null.
       |
       |Example of a recommend turn (readiness rule satisfied — category, gender, and an extra signal known):
       |{
@@ -88,7 +95,8 @@ object AssistantPrompt {
       |    "attributes": { "color": "black", "gender": "men" }
       |  },
       |  "assistantResponse": "Here are some great options for waterproof hiking boots.",
-      |  "followUpQuestion": "Do you prefer mid-cut or low-cut boots?"
+      |  "followUpQuestion": "Do you prefer mid-cut or low-cut boots?",
+      |  "pendingAction": null
       |}
       |
       |Example of a clarify turn (user said "I want shoes" — gender not yet known):
@@ -101,7 +109,8 @@ object AssistantPrompt {
       |    "attributes": {}
       |  },
       |  "assistantResponse": "Happy to help you find the right footwear.",
-      |  "followUpQuestion": "Are you shopping for men or women?"
+      |  "followUpQuestion": "Are you shopping for men or women?",
+      |  "pendingAction": null
       |}
       |""".stripMargin
 
@@ -110,7 +119,8 @@ object AssistantPrompt {
   private def buildPrompt(
       latestMessage: String,
       currentFilters: Option[ExtractedFilters],
-      recentMessages: Seq[MessageRow]
+      recentMessages: Seq[MessageRow],
+      pendingOffer: Option[PendingOfferContext]
   ): String = {
     val filtersStr = currentFilters match {
       case Some(f) => write(f)
@@ -123,6 +133,21 @@ object AssistantPrompt {
       "None"
     }
 
+    val pendingOfferStr = pendingOffer match {
+      case Some(offer) =>
+        s"""PENDING OFFER:
+           |You previously told the user that we don't have the exact product they asked for, but offered
+           |to show related items: ${offer.suggestion} (search filters: ${offer.filtersSummary}).
+           |Decide how the user's latest message responds to that offer:
+           |- Set "pendingAction" to "accept" if the user confirms or agrees to see the offered items
+           |  (e.g. "yes", "yeah go ahead", "show me").
+           |- Set "pendingAction" to "reject" if the user declines the offer (e.g. "no", "not interested").
+           |- Set "pendingAction" to null if the user's message is unrelated to the offer or does not
+           |  clearly confirm or decline it.
+           |""".stripMargin
+      case None => ""
+    }
+
     s"""$SystemPrompt
        |
        |Current conversation filters state:
@@ -131,6 +156,7 @@ object AssistantPrompt {
        |Recent conversation history:
        |$historyStr
        |
+       |$pendingOfferStr
        |Latest user message:
        |$latestMessage
        |""".stripMargin
@@ -141,9 +167,10 @@ object AssistantPrompt {
       latestMessage: String,
       currentFilters: Option[ExtractedFilters],
       recentMessages: Seq[MessageRow],
-      client: LLMClient
+      client: LLMClient,
+      pendingOffer: Option[PendingOfferContext] = None
   ): AssistantLLMResult = {
-    val prompt = buildPrompt(latestMessage, currentFilters, recentMessages)
+    val prompt = buildPrompt(latestMessage, currentFilters, recentMessages, pendingOffer)
     val response = Await.result(Future(client.generate(prompt)), CallTimeout)
     parse(response.text)
   }
@@ -200,11 +227,22 @@ object AssistantPrompt {
       case _                               => None
     }
 
+    val pendingAction = json.obj.get("pendingAction").flatMap {
+      case ujson.Str(s) =>
+        s.trim.toLowerCase match {
+          case "accept" => Some("accept")
+          case "reject" => Some("reject")
+          case _        => None
+        }
+      case _ => None
+    }
+
     AssistantLLMResult(
       mode = mode,
       filters = filters,
       assistantResponse = reply,
-      followUpQuestion = followUpQuestion
+      followUpQuestion = followUpQuestion,
+      pendingAction = pendingAction
     )
   }
 
