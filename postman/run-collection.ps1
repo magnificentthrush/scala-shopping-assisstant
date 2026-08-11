@@ -35,6 +35,11 @@ function Send-Req($Method, $Url, $Body = $null, $Headers = @{}) {
     $content = $null
     if ($_.Exception.Response) {
       $code = [int]$_.Exception.Response.StatusCode
+    }
+    # Try ErrorDetails first (works for Invoke-RestMethod), then stream (for Invoke-WebRequest)
+    if ($_.ErrorDetails.Message) {
+      try { $content = $_.ErrorDetails.Message | ConvertFrom-Json } catch { $content = $_.ErrorDetails.Message }
+    } elseif ($_.Exception.Response -and $_.Exception.Response.GetResponseStream) {
       try {
         $stream = $_.Exception.Response.GetResponseStream()
         $reader = New-Object System.IO.StreamReader($stream)
@@ -178,6 +183,18 @@ if ($script:conversationId) {
 
   $r = Send-Req PATCH ("$Base/api/conversations/" + $script:conversationId) (@{ title = "Waterproof hiking shoes" } | ConvertTo-Json -Compress) $auth
   Test-Case "Conversations: PATCH - rename conversation" ($r.Status -eq 200) ("status=" + $r.Status)
+
+  # Blank title should be rejected with 400, previous title preserved
+  $r = Send-Req PATCH ("$Base/api/conversations/" + $script:conversationId) (@{ title = "" } | ConvertTo-Json -Compress) $auth
+  Test-Case "Conversations: PATCH - blank title rejected" (($r.Status -eq 400) -and ($r.Body.code -eq "BLANK_TITLE")) ("status=" + $r.Status + " code=" + $r.Body.code)
+
+  $r = Send-Req PATCH ("$Base/api/conversations/" + $script:conversationId) (@{ title = "   " } | ConvertTo-Json -Compress) $auth
+  Test-Case "Conversations: PATCH - whitespace-only title rejected" (($r.Status -eq 400) -and ($r.Body.code -eq "BLANK_TITLE")) ("status=" + $r.Status + " code=" + $r.Body.code)
+
+  # Verify title unchanged after rejections
+  $r = Send-Req GET "$Base/api/conversations" $null $auth
+  $currentConvo = @($r.Body.conversations | Where-Object { $_.id -eq $script:conversationId })[0]
+  Test-Case "Conversations: title preserved after blank rename" ($currentConvo.title -eq "Waterproof hiking shoes") ("title=" + $currentConvo.title)
 
   $r = Send-Req DELETE ("$Base/api/conversations/" + $script:conversationId) $null $auth
   Test-Case "Conversations: DELETE - hard delete" ($r.Status -eq 204) ("status=" + $r.Status)
