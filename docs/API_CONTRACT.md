@@ -225,14 +225,14 @@ Frontend: store `token` (e.g. `localStorage`) and send it on later calls as `Aut
 
 ```json
 {
-  "conversationId": "uuid-conversation",
+  "conversationId": null,
   "sessionId": "uuid-session",
   "title": null,
   "messages": []
 }
 ```
 
-Frontend: save `sessionId` + `conversationId` for the open chat; clear the message list.
+Frontend: save `sessionId` for the open chat; clear the message list. `conversationId` is `null` here — starting a chat only creates a `chat_sessions` row; the `conversations` row is lazy-created on the first accepted message (see [`conversationPlan.md`](conversationPlan.md) §2/§4).
 
 ---
 
@@ -356,7 +356,29 @@ Frontend: remove the item from the sidebar list; if it was the open chat, start 
 }
 ```
 
-**Response `200` (normal assistant reply)**
+#### Temporary `200` — Call #1 validation pass only (current backend)
+
+Until Call #2 (assistant + products) is wired, a message that **passes** the regex pre-filter and Call #1 returns this stub. It proves validation + persistence end-to-end; it is **not** a chat reply. See [`call1Plan.md`](call1Plan.md) and [`conversationPlan.md`](conversationPlan.md). Frontend should keep mocking chat until the full assistant body below ships.
+
+```json
+{
+  "safe": true,
+  "sessionId": "uuid-session",
+  "conversationId": "uuid-conversation",
+  "message": "Under $120 and waterproof",
+  "userMessage": {
+    "id": "uuid-user-msg",
+    "role": "user",
+    "content": "Under $120 and waterproof",
+    "sequenceNumber": 1,
+    "createdAt": "2026-08-11T10:16:00Z"
+  }
+}
+```
+
+`sessionId` is now looked up in the DB on every accepted message: a missing `sessionId` returns `404 SESSION_NOT_FOUND`, and a `sessionId` owned by a different user returns `403 FORBIDDEN`. The first accepted message on a fresh session lazy-creates the `conversations` row, so `conversationId` is real here — it is `null` only in the `POST /api/conversations` start response, before any message has been sent.
+
+#### Target `200` — normal assistant reply (Call #2 — not implemented yet)
 
 ```json
 {
@@ -398,7 +420,7 @@ Frontend: remove the item from the sidebar list; if it was the open chat, start 
 }
 ```
 
-`mode` values the UI should handle:
+`mode` values the UI should handle (target contract):
 
 | `mode` | Meaning | UI hint |
 | --- | --- | --- |
@@ -407,7 +429,7 @@ Frontend: remove the item from the sidebar list; if it was the open chat, start 
 | `info` | Informational, no catalog hit needed | Show `reply` |
 | `other` | Fallback / off-script shopping edge | Show `reply` |
 
-**Clarify example**
+**Clarify example** (target)
 
 ```json
 {
@@ -439,9 +461,10 @@ Frontend: show the error in the UI; **do not** append the user's text as a perma
 
 | Status | `code` (example) | When |
 | --- | --- | --- |
+| `400` | — | Missing/blank `message`, invalid JSON |
 | `401` | `UNAUTHORIZED` | Missing/invalid JWT |
-| `403` | `FORBIDDEN` | Session not owned by this user |
-| `404` | `SESSION_NOT_FOUND` | Bad `sessionId` |
+| `403` | `FORBIDDEN` | `sessionId` exists but belongs to a different user |
+| `404` | `SESSION_NOT_FOUND` | `sessionId` does not exist |
 | `500` | `ASSISTANT_FAILED` | Call #2 / pipeline failed after validation |
 | `503` | `UPSTREAM_UNAVAILABLE` | LLM or DB temporarily down |
 

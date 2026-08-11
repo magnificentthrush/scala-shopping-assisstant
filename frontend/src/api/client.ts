@@ -1,3 +1,15 @@
+/* 
+apiFetch handles:
+
+base URL
+headers
+JWT
+JSON
+response parsing
+HTTP errors
+401 handling
+*/
+
 // Base HTTP client — every API call in the app goes through this
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
 
@@ -40,18 +52,18 @@ export async function apiFetch<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${BASE_URL}${path}`, { // https//:localhost:8080/api/auth/register
     ...options,
     headers,
   });
 
-  if (res.status === 204) {
+  if (res.status === 204) {   //methods like "delete" dont have body so just return
     return {} as T;
   }
 
   const data = await res.json().catch(() => ({}));
 
-  if (!res.ok) {
+  if (!res.ok) { // !(200 || 299)
     if (res.status === 401) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
@@ -61,3 +73,14 @@ export async function apiFetch<T>(
 
   return data as T;
 }
+
+/* 
+POST /api/users HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+Authorization: Bearer abc123
+Content-Length: 47
+
+{"name": "Alice", "email": "alice@example.com"}
+
+*/

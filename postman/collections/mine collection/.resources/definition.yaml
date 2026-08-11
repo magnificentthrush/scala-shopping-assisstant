@@ -1,0 +1,2 @@
+$kind: collection
+description: ShopPilot backend API test suite. Run sequentially using Postman Collection Runner.

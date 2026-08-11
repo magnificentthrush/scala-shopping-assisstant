@@ -1,0 +1,9 @@
+name: envForScalaProject
+values:
+  - key: ''
+    secret: true
+  - key: conversationId
+    value: ''
+  - key: sessionId
+    value: ''
+color: 120

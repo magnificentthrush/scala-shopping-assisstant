@@ -1,0 +1,22 @@
+$kind: http-request
+url: http://localhost:8080/api/sessions/any-test-session-id/messages
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{vault:test_token}}
+body:
+  type: json
+  content: '{"message":"I need waterproof hiking shoes under $120"}'
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('Validation pass body', function () {
+        const body = pm.response.json();
+        pm.expect(body.safe).to.eql(true);
+        pm.expect(body.sessionId).to.eql('any-test-session-id');
+      });
+    language: text/javascript
+order: 100

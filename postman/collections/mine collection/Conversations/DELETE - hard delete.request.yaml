@@ -1,0 +1,13 @@
+$kind: http-request
+url: http://localhost:8080/api/conversations/{{conversationId}}
+method: DELETE
+headers:
+  Authorization: Bearer {{vault:test_token}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status 204 No Content', function () {
+        pm.response.to.have.status(204);
+      });
+    language: text/javascript
+order: 500

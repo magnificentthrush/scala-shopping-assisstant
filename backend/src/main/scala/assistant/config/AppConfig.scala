@@ -9,7 +9,12 @@ import scala.util.Try
   *
   * `RESEND_API_KEY` is optional: blank means Phase 1 (no real email;
   * `emailEnabled` is false — see docs/authPlan.md §1). `JWT_SECRET`,
-  * `SUPABASE_URL`, and `SUPABASE_KEY` are required and fail fast if unset.
+  * `SUPABASE_URL`, `SUPABASE_KEY`, and `GEMMA_API_KEY` are required and
+  * fail fast if unset.
+  *
+  * `gemmaApiKey` is consumed by `Main` to construct the single
+  * `GeminiLLMClient` used for both Call #1 and (later) Call #2 — see
+  * docs/call1Plan.md §7 step 3.
   */
 final case class AppConfig(
     jwtSecret: String,
@@ -18,7 +23,8 @@ final case class AppConfig(
     supabaseKey: String,
     resendApiKey: String,
     emailFrom: String,
-    frontendUrl: String
+    frontendUrl: String,
+    gemmaApiKey: String
 ) {
 
   /** True once Resend is configured. `AuthService` uses this to pick
@@ -60,6 +66,7 @@ object AppConfig {
     frontendUrl = {
       val value = env("FRONTEND_URL").trim
       if (value.isEmpty) DefaultFrontendUrl else value
-    }
+    },
+    gemmaApiKey = required("GEMMA_API_KEY")
   )
 }
