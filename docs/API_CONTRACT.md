@@ -356,7 +356,21 @@ Frontend: remove the item from the sidebar list; if it was the open chat, start 
 }
 ```
 
-**Response `200` (normal assistant reply)**
+#### Temporary `200` — Call #1 validation pass only (current backend)
+
+Until Call #2 (assistant + products) is wired, a message that **passes** the regex pre-filter and Call #1 returns this stub. It proves validation end-to-end; it is **not** a chat reply. See [`call1Plan.md`](call1Plan.md). Frontend should keep mocking chat until the full assistant body below ships.
+
+```json
+{
+  "safe": true,
+  "sessionId": "uuid-session",
+  "message": "Under $120 and waterproof"
+}
+```
+
+`sessionId` this pass is echoed from the path and is **not** looked up in the DB (no ownership / `404 SESSION_NOT_FOUND` yet).
+
+#### Target `200` — normal assistant reply (Call #2 — not implemented yet)
 
 ```json
 {
@@ -398,7 +412,7 @@ Frontend: remove the item from the sidebar list; if it was the open chat, start 
 }
 ```
 
-`mode` values the UI should handle:
+`mode` values the UI should handle (target contract):
 
 | `mode` | Meaning | UI hint |
 | --- | --- | --- |
@@ -407,7 +421,7 @@ Frontend: remove the item from the sidebar list; if it was the open chat, start 
 | `info` | Informational, no catalog hit needed | Show `reply` |
 | `other` | Fallback / off-script shopping edge | Show `reply` |
 
-**Clarify example**
+**Clarify example** (target)
 
 ```json
 {
@@ -439,9 +453,10 @@ Frontend: show the error in the UI; **do not** append the user's text as a perma
 
 | Status | `code` (example) | When |
 | --- | --- | --- |
+| `400` | — | Missing/blank `message`, invalid JSON |
 | `401` | `UNAUTHORIZED` | Missing/invalid JWT |
-| `403` | `FORBIDDEN` | Session not owned by this user |
-| `404` | `SESSION_NOT_FOUND` | Bad `sessionId` |
+| `403` | `FORBIDDEN` | Session not owned by this user (not enforced until persistence) |
+| `404` | `SESSION_NOT_FOUND` | Bad `sessionId` (not enforced until persistence) |
 | `500` | `ASSISTANT_FAILED` | Call #2 / pipeline failed after validation |
 | `503` | `UPSTREAM_UNAVAILABLE` | LLM or DB temporarily down |
 

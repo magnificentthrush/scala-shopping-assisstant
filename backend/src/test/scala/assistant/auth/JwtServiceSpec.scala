@@ -25,7 +25,8 @@ class JwtServiceSpec extends AnyFunSuite with Matchers {
     supabaseKey = "test-key",
     resendApiKey = "",
     emailFrom = "noreply@test.dev",
-    frontendUrl = "http://localhost:5173"
+    frontendUrl = "http://localhost:5173",
+    gemmaApiKey = "test-gemma-key"
   )
 
   private val service = new JwtService(config)

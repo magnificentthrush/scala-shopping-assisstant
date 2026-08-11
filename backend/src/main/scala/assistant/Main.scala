@@ -4,9 +4,9 @@ import java.util.concurrent.CountDownLatch
 
 import assistant.auth.JwtService
 import assistant.config.AppConfig
-import assistant.http.{AuthRoutes, Cors, HealthRoutes}
+import assistant.http.{AuthRoutes, Cors, HealthRoutes, MessageRoutes}
 import assistant.repo.{SupabaseRestClient, UserRepo}
-import assistant.services.{AuthService, EmailService}
+import assistant.services.{AuthService, EmailService, GeminiLLMClient, MessageValidationService}
 
 /** Backend entrypoint. Wires config → repos/services → HTTP routes and
   * applies app-wide CORS (docs/authPlan.md §7 step 13).
@@ -23,12 +23,16 @@ object Main extends cask.Main {
     emails = EmailService.fromConfig(config),
     jwt = jwt
   )
+  // One LLM client for the whole app — used by Call #1 validation today and
+  // Call #2 (assistant) later (docs/call1Plan.md §2, §7 step 8).
+  private val llmClient = new GeminiLLMClient(config.gemmaApiKey)
+  private val messageValidationService = new MessageValidationService(llmClient)
 
   override def mainDecorators: Seq[cask.RawDecorator] =
     Seq(new Cors(config.frontendUrl))
 
   override def allRoutes: Seq[cask.Routes] =
-    Seq(HealthRoutes(), AuthRoutes(authService))
+    Seq(HealthRoutes(), AuthRoutes(authService), MessageRoutes(jwt, messageValidationService))
 
   override def main(args: Array[String]): Unit = {
     val publicUrl = sys.env.getOrElse("BACKEND_URL", s"http://localhost:$port")
@@ -37,6 +41,7 @@ object Main extends cask.Main {
     println(s"  ➜  Local:   $publicUrl")
     println(s"  ➜  Health:  $publicUrl/health")
     println(s"  ➜  Auth:    $publicUrl/api/auth/register|login|verify-email")
+    println(s"  ➜  Messages: $publicUrl/api/sessions/:sessionId/messages")
     println("")
     super.main(args)
     // Undertow starts non-blocking; without this the JVM exits right away
