@@ -69,4 +69,58 @@ class RerankerSpec extends AnyFunSuite with Matchers {
     val filters = ExtractedFilters(Some("Shoes"), Some(BigDecimal("50")), List("running"), Map.empty)
     Reranker.rerank(Nil, filters) shouldBe Seq.empty
   }
+
+  test("rerank favors cheaper under-budget item when keyword scores tie") {
+    val cheap = makeProduct("cheap", "Running Shoes Basic", "Footwear", 150.0, "running shoes")
+    val pricey = makeProduct("pricey", "Running Shoes Premium", "Footwear", 499.0, "running shoes")
+
+    val filters = ExtractedFilters(
+      category = Some("Footwear"),
+      budget = Some(BigDecimal("500.0")),
+      keywords = List("running"),
+      attributes = Map.empty
+    )
+
+    val ranked = Reranker.rerank(Seq(pricey, cheap), filters, limit = 5)
+
+    ranked.head.id shouldBe "cheap"
+  }
+
+  test("rerank uses rating as tie-break when scores tie") {
+    val lowRated = makeProduct("low", "Trail Shoes A", "Footwear", 100.0, "trail shoes")
+      .copy(rating = Some("3.5"))
+    val highRated = makeProduct("high", "Trail Shoes B", "Footwear", 100.0, "trail shoes")
+      .copy(rating = Some("4.3"))
+
+    val filters = ExtractedFilters(
+      category = Some("Footwear"),
+      budget = Some(BigDecimal("200.0")),
+      keywords = List("trail"),
+      attributes = Map.empty
+    )
+
+    val ranked = Reranker.rerank(Seq(lowRated, highRated), filters, limit = 5)
+
+    ranked.head.id shouldBe "high"
+  }
+
+  test("rerank suppresses duplicate names keeping highest-scored copy") {
+    val original = makeProduct("orig", "Leather Wallet", "Accessories", 100.0, "leather wallet brown")
+      .copy(rating = Some("4.0"))
+    val duplicate = makeProduct("dup", "  leather wallet  ", "Accessories", 500.0, "duplicate listing")
+      .copy(rating = Some("1.0"))
+    val other = makeProduct("other", "Canvas Belt", "Accessories", 80.0, "canvas belt")
+
+    val filters = ExtractedFilters(
+      category = Some("Accessories"),
+      budget = Some(BigDecimal("200.0")),
+      keywords = List("leather"),
+      attributes = Map.empty
+    )
+
+    val ranked = Reranker.rerank(Seq(duplicate, other, original), filters, limit = 5)
+
+    ranked.map(_.id) should contain theSameElementsAs Seq("orig", "other")
+    ranked.head.id shouldBe "orig"
+  }
 }

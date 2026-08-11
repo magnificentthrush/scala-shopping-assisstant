@@ -40,8 +40,8 @@ object Reranker {
       val priceScore = budgetOpt match {
         case Some(budget) if budget > 0 =>
           if (product.price <= budget) {
-            // Under budget: bonus scaled by price proximity to budget (up to +1.0)
-            1.0 + (product.price / budget).toDouble
+            // Under budget: cheaper relative to budget scores higher (max 2.0 at price -> 0)
+            1.0 + (1.0 - (product.price / budget).toDouble)
           } else {
             // Over budget: penalty proportional to excess over budget
             val excess = (product.price - budget).toDouble / budget.toDouble
@@ -51,14 +51,27 @@ object Reranker {
           0.0
       }
 
-      val totalScore = keywordHits.toDouble + priceScore
-      (product, totalScore)
+      // Rating bonus: +0.5 per rating point when parseable
+      val ratingScore = product.rating.flatMap(r => scala.util.Try(r.trim.toDouble).toOption) match {
+        case Some(rating) => 0.5 * rating
+        case None         => 0.0
+      }
+
+      val totalScore = keywordHits.toDouble + priceScore + ratingScore
+      (product, totalScore, ratingScore)
     }
 
-    // Sort descending by totalScore, tie-break by price ascending
+    // Sort descending by totalScore; tie-break by rating desc, then price asc.
+    // Dedupe by normalized name before taking the limit, keeping the highest-scored copy.
     scored
-      .sortBy { case (p, score) => (-score, p.price) }
-      .map(_._1)
+      .sortBy { case (p, score, ratingScore) => (-score, -ratingScore, p.price) }
+      .foldLeft((Set.empty[String], List.empty[Product])) { case ((seen, kept), (p, _, _)) =>
+        val key = p.name.toLowerCase.trim
+        if (seen.contains(key)) (seen, kept)
+        else (seen + key, p :: kept)
+      }
+      ._2
+      .reverse
       .take(limit)
   }
 }
