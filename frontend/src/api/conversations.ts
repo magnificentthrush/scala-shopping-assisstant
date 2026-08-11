@@ -3,8 +3,7 @@
 
 import { apiFetch } from "./client";
 import type { ConversationSummary, Message } from "../types";
-
-const USE_MOCK_API = true;
+import { USE_MOCK_API } from "./config";
 
 const CONVOS_KEY = "mock_conversations";
 const MESSAGES_KEY = "mock_messages";

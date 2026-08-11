@@ -1,12 +1,11 @@
 // Chat/messaging API calls — matches docs/API_CONTRACT.md
 import { apiFetch } from "./client";
 import type { Message, Product } from "../types";
+import { USE_MOCK_API } from "./config";
 import { registerMockConversation, touchMockConversation, appendMockMessages } from "./conversations";
 
-const USE_MOCK_API = true;
-
 interface StartConversationResponse {
-  conversationId: string;
+  conversationId: string | null; // null until first message lazy-creates the conversation
   sessionId: string;
   title: string | null;
   messages: Message[];
@@ -39,11 +38,11 @@ export async function startConversation(): Promise<StartConversationResponse> {
 
 export async function sendMessage(
   sessionId: string,
-  conversationId: string,
   message: string
 ): Promise<SendMessageResponse> {
   if (USE_MOCK_API) {
     await new Promise((r) => setTimeout(r, 800));
+    const conversationId = crypto.randomUUID();
     touchMockConversation(conversationId, message);
 
     const userMessage: Message = {

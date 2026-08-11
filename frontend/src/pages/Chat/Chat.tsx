@@ -46,7 +46,7 @@ export default function Chat() {
     setSidebarOpen(false);
   }
 
-  if (!conversationId || !sessionId) {
+  if (!sessionId) {
     return (
       <div className="app-loading" role="status" aria-label="Loading your conversations">
         <div className="app-loading__content">
@@ -96,6 +96,10 @@ export default function Chat() {
         <ChatWidget
           conversationId={conversationId}
           sessionId={sessionId}
+          onConversationCreated={(id) => {
+            setConversationId(id);
+            setSidebarRefreshKey((k) => k + 1);
+          }}
           onFirstMessageSent={() => setSidebarRefreshKey((k) => k + 1)}
         />
       </main>
