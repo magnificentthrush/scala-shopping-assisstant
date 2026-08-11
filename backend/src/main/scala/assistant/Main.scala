@@ -29,10 +29,13 @@ object Main extends cask.Main {
   override def port: Int = 8080
 
   private val config = AppConfig.fromEnv()
+  // One PostgREST client shared across all repos — avoids redundant HTTP
+  // client instances for the same base URL and credentials.
+  private val rest = new SupabaseRestClient(config)
   private val jwt = new JwtService(config)
   private val authService = new AuthService(
     config = config,
-    users = new UserRepo(new SupabaseRestClient(config)),
+    users = new UserRepo(rest),
     emails = EmailService.fromConfig(config),
     jwt = jwt
   )
@@ -40,9 +43,6 @@ object Main extends cask.Main {
   // Call #2 (assistant) later (docs/call1Plan.md §2, §7 step 8).
   private val llmClient = new GeminiLLMClient(config.gemmaApiKey)
   private val messageValidationService = new MessageValidationService(llmClient)
-
-  // Six endpoints' repos share one PostgREST client, same as `authService`.
-  private val rest = new SupabaseRestClient(config)
   private val conversationService = new ConversationService(
     chatSessions = new ChatSessionRepo(rest),
     conversations = new ConversationRepo(rest),

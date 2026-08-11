@@ -1,0 +1,17 @@
+$kind: http-request
+url: http://localhost:8080/api/sessions/any-test-session-id/messages
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{vault:test_token}}
+body:
+  type: json
+  content: '{"message":"I need a birthday gift for my brother under $50"}'
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status 200', function () {
+        pm.response.to.have.status(200);
+      });
+    language: text/javascript
+order: 400

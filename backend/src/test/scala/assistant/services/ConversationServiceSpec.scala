@@ -10,10 +10,10 @@ import java.util.UUID
 private class FakeChatSessionRepo extends ChatSessionRepo(null) {
   var sessions = Map.empty[String, ChatSession]
 
-  override def insert(userId: String): ChatSession = {
+  override def insert(userId: String, conversationId: Option[String] = None): ChatSession = {
     val session = ChatSession(
       id = s"session-${UUID.randomUUID()}",
-      conversationId = None,
+      conversationId = conversationId,
       userId = userId,
       createdAt = "2026-08-11T12:00:00Z",
       lastActiveAt = "2026-08-11T12:00:00Z",

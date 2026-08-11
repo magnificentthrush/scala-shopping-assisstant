@@ -1,0 +1,17 @@
+$kind: http-request
+url: http://localhost:8080/api/conversations
+method: GET
+headers:
+  Authorization: Bearer {{vault:test_token}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status 200 OK', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('Returns conversations array', function () {
+        const body = pm.response.json();
+        pm.expect(body.conversations).to.be.an('array');
+      });
+    language: text/javascript
+order: 200

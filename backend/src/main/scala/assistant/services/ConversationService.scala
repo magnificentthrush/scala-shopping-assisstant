@@ -14,6 +14,7 @@ import assistant.domain.{
   ValidationFailure
 }
 import assistant.repo.{ChatSessionRepo, ConversationRepo, ConversationStateRepo, MessageRepo}
+import scala.util.{Failure, Success, Try}
 
 /** Orchestrates the five conversation CRUD actions and `commitUserTurn`
   * (docs/conversationPlan.md §5, §7). Routes stay thin — they parse the HTTP
@@ -60,8 +61,7 @@ class ConversationService(
     for {
       conversation <- requireOwned(conversationId, userId)
     } yield {
-      val session = chatSessions.insert(userId)
-      chatSessions.setConversationId(session.id, conversation.id)
+      val session = chatSessions.insert(userId, conversationId = Some(conversation.id))
       ResumeConversationResponse(
         conversationId = conversation.id,
         sessionId = session.id,
@@ -107,6 +107,16 @@ class ConversationService(
     * 5. Touch activity timestamps
     */
   def commitUserTurn(
+      sessionId: String,
+      userId: String,
+      message: String
+  ): Either[ValidationFailure, CommittedTurn] =
+    Try(commitUserTurnUnsafe(sessionId, userId, message)) match {
+      case Success(result) => result
+      case Failure(_)      => Left(dbError)
+    }
+
+  private def commitUserTurnUnsafe(
       sessionId: String,
       userId: String,
       message: String
@@ -167,6 +177,9 @@ class ConversationService(
       sequenceNumber = m.sequenceNumber,
       createdAt = m.createdAt
     )
+
+  private def dbError: ValidationFailure =
+    ValidationFailure(503, "Something went wrong, please try again.", Some("UPSTREAM_UNAVAILABLE"))
 
   private def sessionNotFound: ValidationFailure =
     ValidationFailure(404, "Session not found", Some("SESSION_NOT_FOUND"))

@@ -1,0 +1,17 @@
+$kind: http-request
+url: http://localhost:8080/api/sessions/any-test-session-id/messages
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{vault:test_token}}
+body:
+  type: json
+  content: 'invalid json'
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status 400', function () {
+        pm.response.to.have.status(400);
+      });
+    language: text/javascript
+order: 800

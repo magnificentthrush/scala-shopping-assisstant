@@ -1,0 +1,12 @@
+$kind: http-request
+url: http://localhost:8080/api/auth/verify-email
+method: OPTIONS
+headers: {}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status 204', function () {
+        pm.response.to.have.status(204);
+      });
+    language: text/javascript
+order: 1700

@@ -1,0 +1,21 @@
+$kind: http-request
+url: http://localhost:8080/api/conversations
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{vault:test_token}}
+body:
+  type: json
+  content: '{}'
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status 201 Created', function () {
+        pm.response.to.have.status(201);
+      });
+      pm.test('Returns new session payload', function () {
+        const body = pm.response.json();
+        pm.expect(body.sessionId).to.be.a('string');
+      });
+    language: text/javascript
+order: 100

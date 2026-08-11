@@ -12,11 +12,12 @@ import upickle.default._
 class ChatSessionRepo(client: SupabaseRestClient) {
   private val Table: String = "chat_sessions"
 
-  /** Inserts a bare session row (no conversation yet) and returns it with
-    * DB-generated fields (`id`, `createdAt`, `lastActiveAt`) filled in.
+  /** Inserts a session row and returns it with DB-generated fields filled in.
+    * Pass `conversationId = Some(id)` when the conversation is already known
+    * (e.g. `resume`) to avoid a second `setConversationId` round-trip.
     */
-  def insert(userId: String): ChatSession = {
-    val row = ChatSessionRepo.NewSessionRow(userId = userId)
+  def insert(userId: String, conversationId: Option[String] = None): ChatSession = {
+    val row = ChatSessionRepo.NewSessionRow(userId = userId, conversationId = conversationId)
     val json = client.post(Table, write(row))
     read[Seq[ChatSession]](json).headOption.getOrElse(
       throw new RuntimeException(s"Supabase returned no row after inserting session for user $userId")
@@ -75,7 +76,10 @@ object ChatSessionRepo {
     * `expires_at` null), so those must not be sent in the request body —
     * same pattern as `UserRepo.NewUserRow`.
     */
-  private case class NewSessionRow(@upickle.implicits.key("user_id") userId: String)
+  private case class NewSessionRow(
+      @upickle.implicits.key("user_id") userId: String,
+      @upickle.implicits.key("conversation_id") conversationId: Option[String]
+  )
 
   private object NewSessionRow {
     implicit val rw: ReadWriter[NewSessionRow] = macroRW
