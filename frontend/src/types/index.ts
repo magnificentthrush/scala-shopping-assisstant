@@ -28,6 +28,8 @@ export interface Message extends ConversationTurn {
   sequenceNumber: number;
   createdAt: string;
   products?: Product[];
+  mode?: "recommend" | "clarify" | "info" | "other";
+  followUpQuestion?: string;
 }
 
 export interface ConversationSummary {
@@ -36,12 +38,6 @@ export interface ConversationSummary {
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string;
-}
-
-export interface User {
-  id: string;
-  fullName: string;
-  email: string;
 }
 
 export interface AuthResponse {

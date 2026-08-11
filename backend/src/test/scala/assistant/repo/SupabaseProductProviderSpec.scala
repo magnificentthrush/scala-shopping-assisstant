@@ -256,6 +256,105 @@ class SupabaseProductProviderSpec extends AnyFunSuite with Matchers {
     products.head.id shouldBe "ok1"
   }
 
+  // --- Gender-aware ladder tests ---
+
+  test("rung 1b: retries with gender + salient term when rung 1 is empty") {
+    val client = new CapturingRestClient
+    client.enqueueResponse("[]") // rung 1 (full term set incl. gender) empty
+    client.enqueueResponse(OneProductJson) // rung 1b hits
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = Some("Clothing"),
+      budget = Some(BigDecimal("400")),
+      keywords = List("shirt", "plain", "black"),
+      attributes = Map("color" -> "black", "gender" -> "men")
+    )
+
+    val products = provider.search(filters)
+
+    products.length shouldBe 1
+    client.calls.length shouldBe 2
+    client.calls(0)("search_vector") shouldBe "plfts(english).Clothing shirt plain black black men"
+    client.calls(1)("search_vector") shouldBe "plfts(english).men shirt" // gender + longest salient term
+    client.calls(1)("price") shouldBe "lte.400"
+  }
+
+  test("rung 2: adds gender FTS and negated opposite term when gender is known") {
+    val client = new CapturingRestClient
+    client.enqueueResponse("[]") // rung 1
+    client.enqueueResponse("[]") // rung 1b
+    client.enqueueResponse(OneProductJson) // rung 2 hits
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = Some("Clothing"),
+      budget = Some(BigDecimal("400")),
+      keywords = List("shirt"),
+      attributes = Map("gender" -> "men")
+    )
+
+    val products = provider.search(filters)
+
+    products.length shouldBe 1
+    client.calls.length shouldBe 3
+    client.calls(2)("category") shouldBe "eq.Clothing"
+    client.calls(2)("search_vector") shouldBe "fts(english).men & !women"
+  }
+
+  test("rung 2 stays keyword-free and gender-free when gender is unknown") {
+    val client = new CapturingRestClient
+    client.enqueueResponse("[]") // rung 1
+    client.enqueueResponse(OneProductJson) // rung 2 hits
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = Some("Mobiles & Accessories"),
+      budget = None,
+      keywords = List("samsung"),
+      attributes = Map.empty
+    )
+
+    provider.search(filters)
+
+    client.calls.length shouldBe 2 // no rung 1b without gender
+    client.calls(1).contains("search_vector") shouldBe false
+  }
+
+  test("rung 3 quality gate requires a word-boundary gender hit when gender is known") {
+    val WomensJson =
+      """[
+        |  {
+        |    "id": "w1",
+        |    "name": "Species Women's Floral Print Casual Shirt",
+        |    "brand": null,
+        |    "category": "Clothing",
+        |    "price": 359,
+        |    "original_price": null,
+        |    "rating": null,
+        |    "description": "Women casual shirt.",
+        |    "image_url": null,
+        |    "product_url": null,
+        |    "product_specifications": null
+        |  }
+        |]""".stripMargin
+    val client = new CapturingRestClient
+    client.enqueueResponse("[]") // rung 1
+    client.enqueueResponse("[]") // rung 1b
+    client.enqueueResponse("[]") // rung 2
+    client.enqueueResponse(WomensJson) // rung 3 raw hit, must be gated out
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = Some("Clothing"),
+      budget = Some(BigDecimal("400")),
+      keywords = List("shirt"),
+      attributes = Map("gender" -> "men")
+    )
+
+    provider.search(filters) shouldBe empty // "women" must not satisfy the "men" requirement
+  }
+
   test("search correctly parses json into Product sequence") {
     val client = new CapturingRestClient
     client.enqueueResponse(

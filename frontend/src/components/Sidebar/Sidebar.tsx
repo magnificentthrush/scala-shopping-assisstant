@@ -78,9 +78,16 @@ export default function Sidebar({
   }
 
   async function saveEdit(id: string) {
-    if (editTitle.trim()) {
-      await renameConversation(id, editTitle.trim());
+    const trimmed = editTitle.trim();
+    if (!trimmed) {
+      setEditingId(null);  // Cancel — backend rejects blank titles
+      return;
+    }
+    try {
+      await renameConversation(id, trimmed);
       await loadConversations();
+    } catch (err) {
+      console.error("Rename failed:", err);
     }
     setEditingId(null);
   }

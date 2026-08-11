@@ -5,6 +5,14 @@ interface ProductCardProps {
   product: Product;
 }
 
+function formatInr(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 export default function ProductCard({ product }: ProductCardProps) {
   const hasDiscount = product.originalPrice && product.originalPrice > product.price;
 
@@ -23,10 +31,15 @@ export default function ProductCard({ product }: ProductCardProps) {
         <h3>{product.name}</h3>
 
         <div className="product-card__price-row">
-          <span className="product-card__price">${product.price}</span>
-        {hasDiscount && (
-            <span className="product-card__original">${product.originalPrice}</span>
-        )}
+          <span className="product-card__price">{formatInr(product.price)}</span>
+          {hasDiscount && (
+            <>
+              <span className="product-card__original">{formatInr(product.originalPrice!)}</span>
+              <span className="product-card__discount">
+                {Math.round((1 - product.price / product.originalPrice!) * 100)}% off
+              </span>
+            </>
+          )}
         </div>
 
         {product.rating ? (
