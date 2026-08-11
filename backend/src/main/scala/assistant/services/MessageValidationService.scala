@@ -28,17 +28,15 @@ class MessageValidationService(client: LLMClient) {
   private val RejectionCode = Some("REJECTED") //user in rejection in the bottom
 
   def validate(
-      message: String,
-      sessionId: String
+      message: String
   ): Either[ValidationFailure, Unit] =
-    Try(validateUnsafe(message, sessionId)) match {
+    Try(validateUnsafe(message)) match {
       case Success(result) => result
       case Failure(_)      => Left(rejected)
     }
 
   private def validateUnsafe(
-      message: String,
-      sessionId: String
+      message: String
   ): Either[ValidationFailure, Unit] = {
     if (message.trim.isEmpty)
       Left(ValidationFailure(status = 400, error = "Please provide a message", code = None))

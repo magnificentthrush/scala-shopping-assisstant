@@ -40,7 +40,7 @@ case class MessageRoutes(
     parseBody[SendMessageRequest](request) match {
       case Left(failure) => errorJson(failure)
       case Right(req) =>
-        validation.validate(req.message, sessionId) match {
+        validation.validate(req.message) match {
           case Left(failure) => errorJson(failure)
           case Right(_) =>
             conversations.commitUserTurn(sessionId, userId, req.message) match {

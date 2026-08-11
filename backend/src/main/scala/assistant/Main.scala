@@ -4,7 +4,7 @@ import java.util.concurrent.CountDownLatch
 
 import assistant.auth.JwtService
 import assistant.config.AppConfig
-import assistant.http.{AuthRoutes, Cors, HealthRoutes, MessageRoutes}
+import assistant.http.{AuthRoutes, ConversationRoutes, Cors, HealthRoutes, MessageRoutes}
 import assistant.repo.{
   ChatSessionRepo,
   ConversationRepo,
@@ -57,7 +57,8 @@ object Main extends cask.Main {
     Seq(
       HealthRoutes(),
       AuthRoutes(authService),
-      MessageRoutes(jwt, messageValidationService, conversationService)
+      MessageRoutes(jwt, messageValidationService, conversationService),
+      ConversationRoutes(jwt, conversationService)
     )
 
   override def main(args: Array[String]): Unit = {
@@ -68,6 +69,7 @@ object Main extends cask.Main {
     println(s"  ➜  Health:  $publicUrl/health")
     println(s"  ➜  Auth:    $publicUrl/api/auth/register|login|verify-email")
     println(s"  ➜  Messages: $publicUrl/api/sessions/:sessionId/messages")
+    println(s"  ➜  Conversations: $publicUrl/api/conversations (start|list|resume|rename|delete)")
     println("")
     super.main(args)
     // Undertow starts non-blocking; without this the JVM exits right away
