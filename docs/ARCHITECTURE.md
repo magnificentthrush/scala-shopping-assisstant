@@ -156,6 +156,8 @@ Creating the conversation **upfront** is simpler for FKs, but it fights the secu
 | 6 | Delete a conversation | `DELETE /api/conversations/{conversationId}` | Ownership-checked. **Hard delete**, `ON DELETE CASCADE` removes messages/state/sessions. |
 | 7 | Rename a conversation | `PATCH /api/conversations/{conversationId}` `{ title }` | `UPDATE … WHERE id = ? AND user_id = ?` — `user_id` in the `WHERE` **is** the authz check. |
 
+**Auto-title (Option B).** A conversation's `title` starts as `NULL` (lazy-create sends only `user_id`). When Call #2 succeeds and the conversation is still untitled, the backend derives a short sidebar label from the resolved filters — `category`, else the first keyword, with `· under ₹<budget>` appended when a budget is set (e.g. `Mobiles & Accessories · under ₹3,000`) — and writes it via `UPDATE … WHERE id = ? AND title IS NULL`. The `title IS NULL` guard makes the fill atomic and means a user's manual rename can never be overwritten. Auto-title never bumps `updated_at` (it's a system fill-in, not a user edit, so it must not reorder the sidebar), is best-effort (a title failure is logged, never fails the turn), and is skipped entirely when the filters are empty (a bare `clarify`/`info` turn leaves the chat untitled rather than giving it a junk label).
+
 Plus the pre-existing catalog/health routes:
 
 | Method | Path | Purpose |
