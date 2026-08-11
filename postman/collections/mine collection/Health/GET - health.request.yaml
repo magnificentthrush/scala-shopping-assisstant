@@ -1,0 +1,16 @@
+$kind: http-request
+url: http://localhost:8080/health
+method: GET
+headers: {}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('Status is ok', function () {
+        const body = pm.response.json();
+        pm.expect(body.status).to.eql('ok');
+      });
+    language: text/javascript
+order: 200

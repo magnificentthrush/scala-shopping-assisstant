@@ -1,6 +1,6 @@
 package assistant.services
 
-import assistant.domain.{ValidationFailure, ValidationPassResponse}
+import assistant.domain.{ValidationFailure}
 
 import scala.util.{Failure, Success, Try}
 
@@ -14,7 +14,9 @@ import scala.util.{Failure, Success, Try}
   *   2. `RegexPreFilter` match → `422 REJECTED`, 0 LLM calls.
   *   3. Call #1 (`PromptValidator`), fail-closed → `422 REJECTED` on
   *      `safe:false` or any failure.
-  *   4. `safe:true` → the temporary `ValidationPassResponse` stub.
+  *   4. `safe:true` → `Right(())` — the message is approved, nothing more.
+  *      Callers (e.g. `ConversationService.commitUserTurn`) decide what to do
+  *      with the approved message (docs/conversationPlan.md §8 task 10).
   *
   * `validate` never throws: an unexpected exception is treated exactly like
   * a fail-closed rejection (never a pass, never a 500).
@@ -26,25 +28,23 @@ class MessageValidationService(client: LLMClient) {
   private val RejectionCode = Some("REJECTED") //user in rejection in the bottom
 
   def validate(
-      message: String,
-      sessionId: String
-  ): Either[ValidationFailure, ValidationPassResponse] =
-    Try(validateUnsafe(message, sessionId)) match {
+      message: String
+  ): Either[ValidationFailure, Unit] =
+    Try(validateUnsafe(message)) match {
       case Success(result) => result
       case Failure(_)      => Left(rejected)
     }
 
   private def validateUnsafe(
-      message: String,
-      sessionId: String
-  ): Either[ValidationFailure, ValidationPassResponse] = {
+      message: String
+  ): Either[ValidationFailure, Unit] = {
     if (message.trim.isEmpty)
       Left(ValidationFailure(status = 400, error = "Please provide a message", code = None))
     else if (RegexPreFilter.isBlocked(message))
       Left(rejected)
     else {
       val result = PromptValidator.validate(message, client)
-      if (result.safe) Right(ValidationPassResponse(safe = true, sessionId = sessionId, message = message))
+      if (result.safe) Right(())
       else Left(rejected)
     }
   }
