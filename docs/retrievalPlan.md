@@ -157,7 +157,7 @@ Mainstream queries work today; specific multi-constraint queries hit zero. `ARCH
 6. Retrieval smoke harness — 10 canonical cases (e.g. "men's watch under 2000" → expect `Watches` in top-5; "cotton t-shirt under 500" → expect `Clothing`; "waterproof hiking boots" → known-thin, assert graceful non-crash with ≤5 results). Run against the live catalog; record pass/fail in this file.
 7. **Done** — `docs/database-schema.md` + `docs/ARCHITECTURE.md` §5 — INR note, fallback-ladder description, category-grounding note.
 8. Manual end-to-end check via the running backend (after `call2Plan.md` tasks 11–13 land): three real messages — mainstream (watch), constrained (t-shirt + budget), and a known-gap query (hiking) — verify top-5 quality, no duplicates, correct ₹ budgets, and graceful gap behavior. Record the three turns here.
-9. Re-run the smoke harness after any prompt/provider/reranker change before merging — this is the standing regression gate.
+9. **Done** — Standing regression gate documented: re-run `data/scripts/retrieval_smoke.py` (exit 0 = all 10 canonical cases pass) after any prompt/provider/reranker change before merging. The harness is committed and self-contained; local runs need `SUPABASE_DB_URL` reachable (MCP `execute_sql` is the fallback when port 5432 is blocked).
 
 ---
 
