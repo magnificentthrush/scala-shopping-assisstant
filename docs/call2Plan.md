@@ -316,7 +316,7 @@ sequenceDiagram
 5. **Done** — `assistant/repo/ConversationStateRepo.scala` — added `find(conversationId): Option[ConversationState]`.
 6. **Done** — `assistant/repo/MessageRepo.scala` — added `recent(conversationId, limit)` and `insertAssistantMessage(conversationId, content, filters)` (via the new `rpc`).
 7. **Done** — `assistant/repo/SupabaseProductProvider.scala` — `ProductProvider` trait + implementation per §4; full-text (`plfts`) + price query logic tested and verified.
-8. `assistant/services/Reranker.scala` — deterministic scorer; unit test with hand-built `Product` fixtures (no DB, no LLM).
+8. **Done** — `assistant/services/Reranker.scala` — deterministic scorer; unit tested with hand-built `Product` fixtures (no DB, no LLM).
 9. `assistant/services/AssistantPrompt.scala` — Call #2 prompt + parsing, mirroring `PromptValidator`'s structure; unit test the JSON-parsing path the same way `PromptValidatorFailClosedSpec` tests parsing (fixed response strings in, no live LLM call).
 10. `assistant/domain/Assistant.scala` — `AssistantLLMResult`, `AssistantTurnResult`, `SendMessageResponse`; extend `MessageResponse` with `products`.
 11. `assistant/services/AssistantService.scala` — orchestration per §4's two-`Try` structure.
