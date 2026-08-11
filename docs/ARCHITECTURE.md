@@ -353,9 +353,12 @@ Business logic never calls Supabase Postgres directly for product data. It depen
 ```
 User message
   → LLM: extract structured filters (category, budget, attributes, keywords)
+       — category is grounded: the LLM picks the closest of the catalog's 32
+         real category strings (or leaves it null), not free text
   → Business Logic
   → ProductProvider.search(filters)   ← interface; SupabaseProductProvider is the only impl
-  → Supabase: full-text search + SQL filters → top 30
+  → Supabase: full-text search + SQL filters → up to 30, via fallback ladder
+       (full term set → category + budget → websearch on the salient term)
   → Reranker → top 5
   → LLM (optional): format/explain the response
   → React
@@ -600,7 +603,7 @@ Step by step:
 6. **Call #1** (validation) runs against the new message + recent context. Fail-closed on `safe:false` or any parse/timeout error — reject, nothing persisted.
 7. Only now: the user's message is appended to `messages` (filters still updated after Call #2; no DB `safe` column).
 8. **Call #2** (assistant) extracts/updates filters and drafts a response, using history + current filters.
-9. Business logic calls `ProductProvider.search(filters)` → `SupabaseProductProvider` → Supabase full-text search + filters → top 30 → reranker → top 5.
+9. Business logic calls `ProductProvider.search(filters)` → `SupabaseProductProvider` → Supabase full-text search + filters → up to 30 candidates, via a fallback ladder when the strict query returns zero (full term set → category + budget → `websearch`-mode FTS on the most salient term) → reranker → top 5.
 10. The assistant's turn is appended to `messages`; `conversation_state.filters` is updated (point-lookup table, current-only).
 11. Response JSON (reply, products, `sessionId`) returns to React through Cask/uPickle.
 

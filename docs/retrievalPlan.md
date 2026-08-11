@@ -155,7 +155,7 @@ Mainstream queries work today; specific multi-constraint queries hit zero. `ARCH
 4. `assistant/services/AssistantPrompt.scala` — add category vocabulary + INR grounding lines (coordinate with `call2Plan.md` task 9 ownership). Add a parse-level test asserting nothing else about the prompt contract changed.
 5. `assistant/repo/SupabaseProductProvider.scala` — implement the fallback ladder. Log which rung served the query (`println` consistent with the existing `[llm]` logging style; full `llm.jsonl`-style retrieval logging is a `call2Plan.md` follow-up, not this plan).
 6. Retrieval smoke harness — 10 canonical cases (e.g. "men's watch under 2000" → expect `Watches` in top-5; "cotton t-shirt under 500" → expect `Clothing`; "waterproof hiking boots" → known-thin, assert graceful non-crash with ≤5 results). Run against the live catalog; record pass/fail in this file.
-7. `docs/database-schema.md` + `docs/ARCHITECTURE.md` §5 — INR note, fallback-ladder description, category-grounding note.
+7. **Done** — `docs/database-schema.md` + `docs/ARCHITECTURE.md` §5 — INR note, fallback-ladder description, category-grounding note.
 8. Manual end-to-end check via the running backend (after `call2Plan.md` tasks 11–13 land): three real messages — mainstream (watch), constrained (t-shirt + budget), and a known-gap query (hiking) — verify top-5 quality, no duplicates, correct ₹ budgets, and graceful gap behavior. Record the three turns here.
 9. Re-run the smoke harness after any prompt/provider/reranker change before merging — this is the standing regression gate.
 

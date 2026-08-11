@@ -38,6 +38,8 @@ CREATE TABLE products (
 | `product_url` | `TEXT` | No | Link to the original product page. |
 | `product_specifications` | `TEXT` | No | Product attributes as text (JSON string of key/value pairs). |
 
+Prices are INR (source dataset currency).
+
 ### Full-text search
 
 ```sql
