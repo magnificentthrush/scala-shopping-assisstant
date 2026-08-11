@@ -30,14 +30,18 @@ class AssistantService(
     // Call #1 is LLM safety; Call #2 is assistant prompt. Failure here -> 500 ASSISTANT_FAILED
     val llmResult = Try(AssistantPrompt.respond(latestMessage, currentFilters, recentMessages, llmClient)) match {
       case Success(res) => res
-      case Failure(_) =>
+      case Failure(ex) =>
+        System.err.println(s"[AssistantService] Call #2 LLM failed: ${ex.getMessage}")
+        ex.printStackTrace()
         return Left(ValidationFailure(500, "Assistant failed to generate a response.", Some("ASSISTANT_FAILED")))
     }
 
     // Product retrieval + atomic RPC commit. Failure here -> 503 UPSTREAM_UNAVAILABLE
     Try(persistAndSearch(conversationId, llmResult)) match {
       case Success(result) => Right(result)
-      case Failure(_) =>
+      case Failure(ex) =>
+        System.err.println(s"[AssistantService] Phase B persistAndSearch failed: ${ex.getMessage}")
+        ex.printStackTrace()
         Left(ValidationFailure(503, "Upstream database or search service unavailable.", Some("UPSTREAM_UNAVAILABLE")))
     }
   }

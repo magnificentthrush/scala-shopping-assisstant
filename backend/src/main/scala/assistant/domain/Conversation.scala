@@ -66,7 +66,7 @@ case class MessageRow(
     @key("sequence_number") sequenceNumber: Int,
     role: String,
     content: String,
-    @key("filters_snapshot") filtersSnapshot: Option[String],
+    @key("filters_snapshot") filtersSnapshot: Option[ujson.Value] = None,
     @key("created_at") createdAt: String
 )
 

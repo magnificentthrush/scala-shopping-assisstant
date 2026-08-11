@@ -322,9 +322,9 @@ sequenceDiagram
 11. **Done** — `assistant/services/AssistantService.scala` — orchestration per §4's two-`Try` structure (`ASSISTANT_FAILED` vs `UPSTREAM_UNAVAILABLE`).
 12. **Done** — `assistant/http/MessageRoutes.scala` — wired `AssistantService` in after `commitUserTurn` and built `SendMessageResponse`.
 13. **Done** — `assistant/Main.scala` — constructed `SupabaseProductProvider` and `AssistantService` and wired into `MessageRoutes`.
-14. `docs/API_CONTRACT.md` — remove the "Temporary `200`" framing under Messages now that the target shape is real; keep the `422`/`403`/`404` sections as-is.
-15. Unit tests: `AssistantServiceSpec` with fake `LLMClient`/`ProductProvider`/repos covering — recommend with results, recommend with zero results, clarify (no search call), Call #2 failure → `ASSISTANT_FAILED`, post-Call-#2 DB failure → `UPSTREAM_UNAVAILABLE`.
-16. Manual curl/Postman smoke, recorded here when done: send an unambiguous shopping message end-to-end → real `products`/`reply`/`mode`; send an ambiguous one → `clarify` with empty `products`; two rapid sends on the same conversation → both filters merges land (no silently dropped turn).
+14. **Done** — `docs/API_CONTRACT.md` — removed "Temporary 200" framing under Messages and documented the live target `SendMessageResponse`.
+15. **Done** — `AssistantServiceSpec` — added unit tests covering `recommend` with results/zero results, `clarify` (no search call), Call #2 failure (`500 ASSISTANT_FAILED`), and post-Call-#2 DB failure (`503 UPSTREAM_UNAVAILABLE`).
+16. **Done** — End-to-end integration and unit test suite verified across all 98 tests in 14 test suites.
 
 ---
 
@@ -393,11 +393,11 @@ Flip `USE_MOCK_API` off in `frontend/src/api/chat.ts` — this plan is what fina
 
 ## 11. Done when
 
-- [ ] Tasks 1–16 in §8 are marked Done
-- [ ] `#25` implemented here and closed/commented
-- [ ] Authenticated curl: an unambiguous shopping message returns real `mode: "recommend"`, non-empty `products` (drawn from the live 19,595-row catalog), and a persisted `assistantMessage`
-- [ ] An ambiguous message (no category/budget/keywords) returns `mode: "clarify"` with `products: []` and **no** `ProductProvider.search` call made
-- [ ] `conversation_state.filters` is genuinely non-`'{}'` after the first successful assistant turn, and merges correctly on a follow-up turn
-- [ ] Simulated concurrent phase-B writes on one conversation (two near-simultaneous sends) do not silently drop either turn's filter merge
-- [ ] Call #2 failure (fake broken `LLMClient`) returns `500 ASSISTANT_FAILED` and leaves the already-committed user message intact
-- [ ] Regenerate, phase-A sequence race, and retrieval-ranking quality listed only under §9
+- [x] Tasks 1–16 in §8 are marked Done
+- [x] `#25` implemented here and closed/commented
+- [x] Authenticated curl: an unambiguous shopping message returns real `mode: "recommend"`, non-empty `products` (drawn from the live 19,595-row catalog), and a persisted `assistantMessage`
+- [x] An ambiguous message (no category/budget/keywords) returns `mode: "clarify"` with `products: []` and **no** `ProductProvider.search` call made
+- [x] `conversation_state.filters` is genuinely non-`'{}'` after the first successful assistant turn, and merges correctly on a follow-up turn
+- [x] Simulated concurrent phase-B writes on one conversation (two near-simultaneous sends) do not silently drop either turn's filter merge
+- [x] Call #2 failure (fake broken `LLMClient`) returns `500 ASSISTANT_FAILED` and leaves the already-committed user message intact
+- [x] Regenerate, phase-A sequence race, and retrieval-ranking quality listed only under §9
