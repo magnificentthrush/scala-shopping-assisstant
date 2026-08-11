@@ -237,6 +237,36 @@ class ConversationServiceSpec extends AnyFunSuite with Matchers {
     okResult.toOption.get.title shouldBe Some("New Title")
   }
 
+  test("rename rejects blank/whitespace-only titles with 400") {
+    val (service, _, conversations, _, _) = createFixture()
+    val conv1 = conversations.insert("user-1")
+
+    // Set a real title first
+    service.rename(conv1.id, "user-1", RenameConversationRequest("My Chat"))
+    conversations.findById(conv1.id).get.title shouldBe Some("My Chat")
+
+    // Blank titles are rejected — previous title preserved
+    val blankResults = Seq(
+      RenameConversationRequest(""),
+      RenameConversationRequest("   "),
+      RenameConversationRequest("\t\n ")
+    )
+    blankResults.foreach { req =>
+      val result = service.rename(conv1.id, "user-1", req)
+      result shouldBe a[Left[_, _]]
+      result.left.toOption.get.status shouldBe 400
+      result.left.toOption.get.code shouldBe Some("BLANK_TITLE")
+    }
+
+    // Title unchanged after rejections
+    conversations.findById(conv1.id).get.title shouldBe Some("My Chat")
+
+    // Whitespace around a real title is trimmed and accepted
+    val trimmed = service.rename(conv1.id, "user-1", RenameConversationRequest("  My New Title  "))
+    trimmed shouldBe a[Right[_, _]]
+    trimmed.toOption.get.title shouldBe Some("My New Title")
+  }
+
   test("delete removes conversation when owned by user, 404/403 otherwise") {
     val (service, _, conversations, _, _) = createFixture()
     val conv1 = conversations.insert("user-1")

@@ -73,6 +73,10 @@ class ConversationService(
   /** `PATCH /api/conversations/{id}` — rename. Same 404/403 pattern, then
     * update title (the repo's `WHERE id=eq AND user_id=eq` is the second
     * belt-and-suspenders check).
+    *
+    * Blank / whitespace-only titles are rejected with 400: renaming to ""
+    * would silently erase the sidebar label, which is a UX bug — the frontend
+    * shows "New chat" for null titles, so an empty string is worse than null.
     */
   def rename(
       conversationId: String,
@@ -81,8 +85,12 @@ class ConversationService(
   ): Either[ValidationFailure, ConversationSummary] =
     for {
       _ <- requireOwned(conversationId, userId)
+      trimmedTitle <- Right(req.title.trim).filterOrElse(
+        _.nonEmpty,
+        ValidationFailure(400, "Title cannot be blank", Some("BLANK_TITLE"))
+      )
       updated <- conversations
-        .updateTitle(conversationId, userId, req.title)
+        .updateTitle(conversationId, userId, trimmedTitle)
         .toRight(notFound)
         .map(toSummary)
     } yield updated
