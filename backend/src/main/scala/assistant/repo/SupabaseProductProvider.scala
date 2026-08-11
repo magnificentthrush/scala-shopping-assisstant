@@ -74,11 +74,26 @@ class SupabaseProductProvider(client: SupabaseRestClient) extends ProductProvide
       .sortBy(-_.length)
       .headOption
 
-    val rung3 = salient match {
+    val rung3raw = salient match {
       case Some(term) =>
         run(baseParams(Map("search_vector" -> s"wfts(english).$term")))
       case None => Seq.empty
     }
+
+    // Rung-3 quality gate: FTS matches product_specifications too, so an
+    // electrical switch with {"key": "Waterproof", "value": "No"} can surface
+    // for "waterproof hiking shoes". Require keyword overlap in user-visible
+    // text (name/brand/category/description) — at least 2 hits when the query
+    // had 2+ terms, else 1 — so vocabulary accidents don't reach the user.
+    val terms = (filters.keywords ++ filters.attributes.values)
+      .map(_.trim.toLowerCase)
+      .filter(_.nonEmpty)
+      .distinct
+    def visibleText(p: Product): String =
+      (Seq(p.name, p.category) ++ p.brand.toSeq ++ p.description.toSeq).mkString(" ").toLowerCase
+    def termHits(p: Product): Int = terms.count(t => visibleText(p).contains(t))
+    val minHits = if (terms.size >= 2) 2 else 1
+    val rung3 = if (terms.isEmpty) rung3raw else rung3raw.filter(p => termHits(p) >= minHits)
 
     if (rung3.nonEmpty) {
       println(s"[retrieval] rung 3 (websearch '${salient.getOrElse("")}') returned ${rung3.size} candidates")

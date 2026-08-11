@@ -58,10 +58,22 @@ class AssistantService(
       Seq.empty[Product]
     }
 
+    // The LLM wrote its reply before search ran, so it can't know the catalog
+    // came back empty — "here are some great options" above zero product cards
+    // is dishonest. Override with a deterministic zero-result message instead.
+    val honestResult = if (shouldSearch && products.isEmpty) {
+      llmResult.copy(
+        assistantResponse =
+          "I couldn't find anything in our catalog matching those exact filters. " +
+            "Try broadening the category or raising the budget and I'll search again.",
+        followUpQuestion = Some("Would you like to relax the budget or browse a wider category?")
+      )
+    } else llmResult
+
     val filtersJsonStr = write(filters)
     val filtersJsonVal = ujson.read(filtersJsonStr)
 
-    val msgRow = messages.insertAssistantMessage(conversationId, llmResult.assistantResponse, filtersJsonVal)
+    val msgRow = messages.insertAssistantMessage(conversationId, honestResult.assistantResponse, filtersJsonVal)
 
     val assistantMsgResponse = MessageResponse(
       id = msgRow.id,
@@ -73,9 +85,9 @@ class AssistantService(
     )
 
     AssistantTurnResult(
-      mode = llmResult.mode,
-      reply = llmResult.assistantResponse,
-      followUpQuestion = llmResult.followUpQuestion,
+      mode = honestResult.mode,
+      reply = honestResult.assistantResponse,
+      followUpQuestion = honestResult.followUpQuestion,
       products = products,
       assistantMessage = assistantMsgResponse
     )

@@ -137,7 +137,23 @@ class SupabaseProductProviderSpec extends AnyFunSuite with Matchers {
   test("rung 3: falls back to websearch on the salient term when rungs 1–2 are empty") {
     val client = new CapturingRestClient
     client.enqueueResponse("[]") // rung 1
-    client.enqueueResponse(OneProductJson) // rung 3 hits (rung 2 skipped: no category)
+    client.enqueueResponse(
+      """[
+        |  {
+        |    "id": "p-wb",
+        |    "name": "Waterproof Hiking Boot",
+        |    "brand": "TrailCo",
+        |    "category": "Footwear",
+        |    "price": 2499,
+        |    "original_price": null,
+        |    "rating": null,
+        |    "description": "Waterproof boot for hiking trails.",
+        |    "image_url": null,
+        |    "product_url": null,
+        |    "product_specifications": null
+        |  }
+        |]""".stripMargin
+    ) // rung 3 hits (rung 2 skipped: no category)
     val provider = new SupabaseProductProvider(client)
 
     val filters = ExtractedFilters(
@@ -170,6 +186,74 @@ class SupabaseProductProviderSpec extends AnyFunSuite with Matchers {
 
     products shouldBe empty
     client.calls.length shouldBe 3 // all three rungs attempted
+  }
+
+  test("rung 3 quality gate drops results with no keyword overlap in visible text") {
+    // An electrical switch whose specs say {"Waterproof": "No"} matches FTS
+    // for "waterproof" but shares no vocabulary with "waterproof hiking".
+    val JunkJson =
+      """[
+        |  {
+        |    "id": "junk1",
+        |    "name": "Avita 15 One Way Electrical Switch",
+        |    "brand": "Avita",
+        |    "category": "Home Improvement",
+        |    "price": 57,
+        |    "original_price": null,
+        |    "rating": null,
+        |    "description": "Buy Avita switch online.",
+        |    "image_url": null,
+        |    "product_url": null,
+        |    "product_specifications": "[{\"key\": \"Waterproof\", \"value\": \"No\"}]"
+        |  }
+        |]""".stripMargin
+    val client = new CapturingRestClient
+    client.enqueueResponse("[]") // rung 1
+    client.enqueueResponse(JunkJson) // rung 3 (rung 2 skipped: no category)
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = None,
+      budget = None,
+      keywords = List("waterproof", "hiking"),
+      attributes = Map.empty
+    )
+
+    provider.search(filters) shouldBe empty
+  }
+
+  test("rung 3 quality gate keeps results with keyword overlap in visible text") {
+    val MatchJson =
+      """[
+        |  {
+        |    "id": "ok1",
+        |    "name": "Wildcraft Waterproof Hiking Backpack",
+        |    "brand": "Wildcraft",
+        |    "category": "Bags, Wallets & Belts",
+        |    "price": 1499,
+        |    "original_price": null,
+        |    "rating": null,
+        |    "description": "Waterproof hiking pack.",
+        |    "image_url": null,
+        |    "product_url": null,
+        |    "product_specifications": null
+        |  }
+        |]""".stripMargin
+    val client = new CapturingRestClient
+    client.enqueueResponse("[]") // rung 1
+    client.enqueueResponse(MatchJson) // rung 3
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = None,
+      budget = None,
+      keywords = List("waterproof", "hiking"),
+      attributes = Map.empty
+    )
+
+    val products = provider.search(filters)
+    products.length shouldBe 1
+    products.head.id shouldBe "ok1"
   }
 
   test("search correctly parses json into Product sequence") {

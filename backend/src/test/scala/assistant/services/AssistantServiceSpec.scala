@@ -120,7 +120,34 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     val turn = result.toOption.get
     turn.mode shouldBe "recommend"
     turn.products shouldBe Seq.empty
+    turn.reply should include("couldn't find anything")
+    turn.followUpQuestion should not be empty
     provider.searchCalled shouldBe true
+  }
+
+  test("respond keeps the LLM reply when search returns results") {
+    val llmJson =
+      """{
+        |  "mode": "recommend",
+        |  "filters": { "category": "Watches", "keywords": ["watch"], "attributes": {} },
+        |  "assistantResponse": "Here are watches.",
+        |  "followUpQuestion": null
+        |}""".stripMargin
+
+    val llmClient = new TestLLMClient(llmJson)
+    val provider = new TestProductProvider(Seq(makeProduct("p1", "Men's Watch", "Watches", 999.0)))
+    val client = new TestRestClient()
+    val stateRepo = new ConversationStateRepo(client)
+    val msgRepo = new MessageRepo(client)
+
+    val service = new AssistantService(llmClient, provider, stateRepo, msgRepo)
+    val result = service.respond("c1", "show me watches")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.reply shouldBe "Here are watches."
+    turn.followUpQuestion shouldBe None
+    turn.products.length shouldBe 1
   }
 
   test("respond handles mode clarify without executing search") {
