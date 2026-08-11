@@ -82,8 +82,6 @@ export default function ChatWidget({ conversationId, sessionId, onConversationCr
           {
             ...res.assistantMessage,
             products: res.products,
-            mode: res.mode,
-            followUpQuestion: res.followUpQuestion ?? undefined,
           },
         ];
       });
@@ -139,16 +137,6 @@ export default function ChatWidget({ conversationId, sessionId, onConversationCr
                           <ProductCard key={product.id} product={product} />
                         ))}
                       </div>
-                    ) : null}
-
-                    {msg.mode === "clarify" && msg.followUpQuestion ? (
-                      <button
-                        type="button"
-                        className="follow-up-chip"
-                        onClick={() => setInput(msg.followUpQuestion!)}
-                      >
-                        {msg.followUpQuestion}
-                      </button>
                     ) : null}
 
                     {msg.role === "assistant" ? (

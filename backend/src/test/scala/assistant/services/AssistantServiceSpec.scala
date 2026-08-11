@@ -89,13 +89,13 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     val llmJson =
       """{
         |  "mode": "recommend",
-        |  "filters": { "category": "Footwear", "budget": 100.0, "keywords": ["hiking"], "attributes": {} },
+        |  "filters": { "category": "Footwear", "budget": 100.0, "keywords": ["hiking"], "attributes": { "gender": "men" } },
         |  "assistantResponse": "Here are boots under $100.",
         |  "followUpQuestion": null
         |}""".stripMargin
 
     val llmClient = new TestLLMClient(llmJson)
-    val products = Seq(makeProduct("p1", "Hiking Boot", "Footwear", 89.99))
+    val products = Seq(makeProduct("p1", "Men Hiking Boot", "Footwear", 89.99))
     val provider = new TestProductProvider(products)
     val client = new TestRestClient()
     val stateRepo = new ConversationStateRepo(client)
@@ -118,7 +118,7 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     val llmJson =
       """{
         |  "mode": "recommend",
-        |  "filters": { "category": "Footwear", "keywords": ["nonexistent"], "attributes": {} },
+        |  "filters": { "category": "Footwear", "keywords": ["nonexistent"], "attributes": { "gender": "men" } },
         |  "assistantResponse": "No boots found.",
         |  "followUpQuestion": null
         |}""".stripMargin
@@ -145,7 +145,7 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     val llmJson =
       """{
         |  "mode": "recommend",
-        |  "filters": { "category": "Watches", "keywords": ["watch"], "attributes": {} },
+        |  "filters": { "category": "Watches", "keywords": ["watch"], "attributes": { "gender": "men" } },
         |  "assistantResponse": "Here are watches.",
         |  "followUpQuestion": null
         |}""".stripMargin
@@ -257,6 +257,142 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     failure.code shouldBe Some("UPSTREAM_UNAVAILABLE")
   }
 
+  // --- Discovery-first readiness gate tests ---
+
+  test("respond forces clarify and asks men/women when gender is missing for a gender-relevant category") {
+    val llmJson =
+      """{
+        |  "mode": "recommend",
+        |  "filters": { "category": "Footwear", "budget": null, "keywords": [], "attributes": {} },
+        |  "assistantResponse": "Here are some shoes.",
+        |  "followUpQuestion": null
+        |}""".stripMargin
+
+    val llmClient = new TestLLMClient(llmJson)
+    val provider = new TestProductProvider(Seq(makeProduct("p1", "Sneaker", "Footwear", 999.0)))
+    val client = new TestRestClient()
+    val service = new AssistantService(
+      llmClient, provider, new ConversationStateRepo(client), new MessageRepo(client), new ConversationRepo(client)
+    )
+
+    val result = service.respond("c1", "I want shoes")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.mode shouldBe "clarify"
+    turn.products shouldBe Seq.empty
+    turn.followUpQuestion shouldBe Some("Are you shopping for men or women?")
+    turn.reply should include("Are you shopping for men or women?")
+    provider.searchCalled shouldBe false
+  }
+
+  test("respond detects gender from keywords and asks for one more signal instead") {
+    val llmJson =
+      """{
+        |  "mode": "recommend",
+        |  "filters": { "category": "Footwear", "budget": null, "keywords": [], "attributes": { "gender": "women" } },
+        |  "assistantResponse": "Here are some shoes.",
+        |  "followUpQuestion": null
+        |}""".stripMargin
+
+    val llmClient = new TestLLMClient(llmJson)
+    val provider = new TestProductProvider(Seq(makeProduct("p1", "Heels", "Footwear", 1999.0)))
+    val client = new TestRestClient()
+    val service = new AssistantService(
+      llmClient, provider, new ConversationStateRepo(client), new MessageRepo(client), new ConversationRepo(client)
+    )
+
+    val result = service.respond("c1", "for women")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.mode shouldBe "clarify"
+    turn.products shouldBe Seq.empty
+    turn.followUpQuestion shouldBe Some("Do you have a budget, brand, color, or use-case in mind?")
+    provider.searchCalled shouldBe false
+  }
+
+  test("respond searches when category, gender, and an extra signal are all present") {
+    val llmJson =
+      """{
+        |  "mode": "recommend",
+        |  "filters": { "category": "Footwear", "budget": null, "keywords": ["running"], "attributes": { "gender": "men" } },
+        |  "assistantResponse": "Here are running shoes for men.",
+        |  "followUpQuestion": null
+        |}""".stripMargin
+
+    val llmClient = new TestLLMClient(llmJson)
+    val provider = new TestProductProvider(Seq(makeProduct("p1", "Men Running Shoe", "Footwear", 1499.0)))
+    val client = new TestRestClient()
+    val service = new AssistantService(
+      llmClient, provider, new ConversationStateRepo(client), new MessageRepo(client), new ConversationRepo(client)
+    )
+
+    val result = service.respond("c1", "running shoes for men")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.mode shouldBe "recommend"
+    turn.products.length shouldBe 1
+    provider.searchCalled shouldBe true
+  }
+
+  test("respond does not ask about gender for a non-gender-relevant category") {
+    val llmJson =
+      """{
+        |  "mode": "recommend",
+        |  "filters": { "category": "Mobiles & Accessories", "budget": null, "keywords": ["samsung"], "attributes": {} },
+        |  "assistantResponse": "Here are some Samsung phones.",
+        |  "followUpQuestion": null
+        |}""".stripMargin
+
+    val llmClient = new TestLLMClient(llmJson)
+    val provider = new TestProductProvider(Seq(makeProduct("p1", "Samsung Galaxy", "Mobiles & Accessories", 14999.0)))
+    val client = new TestRestClient()
+    val service = new AssistantService(
+      llmClient, provider, new ConversationStateRepo(client), new MessageRepo(client), new ConversationRepo(client)
+    )
+
+    val result = service.respond("c1", "samsung phone")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.mode shouldBe "recommend"
+    turn.products.length shouldBe 1
+    turn.reply should not include "men or women"
+    provider.searchCalled shouldBe true
+  }
+
+  test("respond never returns opposite-gender products when gender filter is set") {
+    val llmJson =
+      """{
+        |  "mode": "recommend",
+        |  "filters": { "category": "Clothing", "budget": 400.0, "keywords": ["shirt", "plain", "black"], "attributes": { "color": "black", "gender": "men" } },
+        |  "assistantResponse": "Here are plain black shirts for men.",
+        |  "followUpQuestion": null
+        |}""".stripMargin
+
+    val llmClient = new TestLLMClient(llmJson)
+    // The provider hands back a mixed pool (as rung 2 did in production); the
+    // reranker's hard gender gate must keep only the men's shirt.
+    val provider = new TestProductProvider(Seq(
+      makeProduct("w1", "Species Women's Floral Print Casual Shirt", "Clothing", 359.0),
+      makeProduct("w2", "Kiosha Women's Solid Casual Shirt", "Clothing", 297.0),
+      makeProduct("m1", "Roadster Men Black Plain Casual Shirt", "Clothing", 399.0)
+    ))
+    val client = new TestRestClient()
+    val service = new AssistantService(
+      llmClient, provider, new ConversationStateRepo(client), new MessageRepo(client), new ConversationRepo(client)
+    )
+
+    val result = service.respond("c1", "no design, plain black shirt")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.products.map(_.id) shouldBe Seq("m1")
+    turn.products.exists(_.name.toLowerCase.contains("women")) shouldBe false
+  }
+
   // --- Option B auto-title tests ---
 
   test("deriveTitle uses category, appends INR budget") {
@@ -338,7 +474,7 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     val llmJson =
       """{
         |  "mode": "recommend",
-        |  "filters": { "category": "Hiking shoes", "keywords": [], "attributes": {} },
+        |  "filters": { "category": "Hiking shoes", "keywords": ["hiking"], "attributes": {} },
         |  "assistantResponse": "Here are shoes.",
         |  "followUpQuestion": null
         |}""".stripMargin

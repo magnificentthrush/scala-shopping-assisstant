@@ -847,24 +847,6 @@ input:focus-visible {
   line-height: 1;
 }
 
-/* Follow-up question chip */
-.follow-up-chip {
-  display: inline-block;
-  margin-top: 8px;
-  padding: 8px 14px;
-  background: var(--sp-surface-muted);
-  border: 1px solid var(--sp-border, #e0e0e0);
-  border-radius: 20px;
-  color: var(--sp-text);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.follow-up-chip:hover {
-  background: var(--sp-surface-hover);
-}
-
 /* Product cards */
 .product-rail {
   display: grid;
