@@ -319,9 +319,9 @@ sequenceDiagram
 8. **Done** — `assistant/services/Reranker.scala` — deterministic scorer; unit tested with hand-built `Product` fixtures (no DB, no LLM).
 9. **Done** — `assistant/services/AssistantPrompt.scala` — Call #2 prompt + parsing, mirroring `PromptValidator` structure; unit tested parsing logic via `AssistantPromptSpec`.
 10. **Done** — `assistant/domain/Assistant.scala` — `AssistantLLMResult`, `AssistantTurnResult`, `SendMessageResponse`; extended `MessageResponse` with `products`.
-11. `assistant/services/AssistantService.scala` — orchestration per §4's two-`Try` structure.
-12. `assistant/http/MessageRoutes.scala` — wire `AssistantService` in after `commitUserTurn`; build `SendMessageResponse`; retire `ValidationPassResponse` from the success path (keep the type if anything else still references it, otherwise delete it).
-13. `assistant/Main.scala` — construct `SupabaseProductProvider(rest)` and `AssistantService(llmClient, productProvider, conversationStates, messages)`; pass into `MessageRoutes`.
+11. **Done** — `assistant/services/AssistantService.scala` — orchestration per §4's two-`Try` structure (`ASSISTANT_FAILED` vs `UPSTREAM_UNAVAILABLE`).
+12. **Done** — `assistant/http/MessageRoutes.scala` — wired `AssistantService` in after `commitUserTurn` and built `SendMessageResponse`.
+13. **Done** — `assistant/Main.scala` — constructed `SupabaseProductProvider` and `AssistantService` and wired into `MessageRoutes`.
 14. `docs/API_CONTRACT.md` — remove the "Temporary `200`" framing under Messages now that the target shape is real; keep the `422`/`403`/`404` sections as-is.
 15. Unit tests: `AssistantServiceSpec` with fake `LLMClient`/`ProductProvider`/repos covering — recommend with results, recommend with zero results, clarify (no search call), Call #2 failure → `ASSISTANT_FAILED`, post-Call-#2 DB failure → `UPSTREAM_UNAVAILABLE`.
 16. Manual curl/Postman smoke, recorded here when done: send an unambiguous shopping message end-to-end → real `products`/`reply`/`mode`; send an ambiguous one → `clarify` with empty `products`; two rapid sends on the same conversation → both filters merges land (no silently dropped turn).
