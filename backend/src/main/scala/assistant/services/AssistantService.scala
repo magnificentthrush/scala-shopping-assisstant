@@ -70,10 +70,23 @@ class AssistantService(
       )
     } else llmResult
 
+    // The resolved filters are appended as a deterministic summary — the LLM's
+    // own prose hallucinates budget numbers (it wrote "₹12,000" for a 2000
+    // budget), so per ARCHITECTURE.md §5 the authoritative summary is built
+    // here, and the prompt is instructed never to quote figures itself.
+    val summaryParts =
+      filters.category.toSeq ++
+        filters.budget.map(b => s"under ₹${formatInr(b)}") ++
+        filters.keywords.headOption.map(k => s""""$k"""").toSeq
+    val finalReply =
+      if (shouldSearch && summaryParts.nonEmpty)
+        s"${honestResult.assistantResponse} (Filters: ${summaryParts.mkString(", ")})"
+      else honestResult.assistantResponse
+
     val filtersJsonStr = write(filters)
     val filtersJsonVal = ujson.read(filtersJsonStr)
 
-    val msgRow = messages.insertAssistantMessage(conversationId, honestResult.assistantResponse, filtersJsonVal)
+    val msgRow = messages.insertAssistantMessage(conversationId, finalReply, filtersJsonVal)
 
     val assistantMsgResponse = MessageResponse(
       id = msgRow.id,
@@ -86,10 +99,16 @@ class AssistantService(
 
     AssistantTurnResult(
       mode = honestResult.mode,
-      reply = honestResult.assistantResponse,
+      reply = finalReply,
       followUpQuestion = honestResult.followUpQuestion,
       products = products,
       assistantMessage = assistantMsgResponse
     )
+  }
+
+  private def formatInr(amount: BigDecimal): String = {
+    val fmt = java.text.NumberFormat.getNumberInstance(new java.util.Locale("en", "IN"))
+    fmt.setMaximumFractionDigits(0)
+    fmt.format(amount.bigDecimal)
   }
 }

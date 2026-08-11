@@ -92,7 +92,8 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     result.isRight shouldBe true
     val turn = result.toOption.get
     turn.mode shouldBe "recommend"
-    turn.reply shouldBe "Here are boots under $100."
+    turn.reply should startWith("Here are boots under $100.")
+    turn.reply should include("under ₹100")
     turn.products.length shouldBe 1
     turn.products.head.id shouldBe "p1"
     provider.searchCalled shouldBe true
@@ -145,9 +146,34 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
 
     result.isRight shouldBe true
     val turn = result.toOption.get
-    turn.reply shouldBe "Here are watches."
+    turn.reply should startWith("Here are watches.")
+    turn.reply should include("(Filters: Watches")
     turn.followUpQuestion shouldBe None
     turn.products.length shouldBe 1
+  }
+
+  test("respond appends INR-formatted budget in the filter summary") {
+    val llmJson =
+      """{
+        |  "mode": "recommend",
+        |  "filters": { "category": "Watches", "budget": 2000.0, "keywords": ["men's watch"], "attributes": {} },
+        |  "assistantResponse": "Here are watches under your budget.",
+        |  "followUpQuestion": null
+        |}""".stripMargin
+
+    val llmClient = new TestLLMClient(llmJson)
+    val provider = new TestProductProvider(Seq(makeProduct("p1", "Men's Watch", "Watches", 1599.0)))
+    val client = new TestRestClient()
+    val stateRepo = new ConversationStateRepo(client)
+    val msgRepo = new MessageRepo(client)
+
+    val service = new AssistantService(llmClient, provider, stateRepo, msgRepo)
+    val result = service.respond("c1", "men's watch under 2000")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.reply should include("under ₹2,000")
+    turn.reply should include("Watches")
   }
 
   test("respond handles mode clarify without executing search") {

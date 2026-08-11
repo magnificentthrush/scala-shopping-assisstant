@@ -37,7 +37,8 @@ object AssistantPrompt {
       |GROUNDING:
       |- The product catalog has exactly these category strings: Clothing; Jewellery; Footwear; Mobiles & Accessories; Automotive; Home Decor & Festive Needs; Beauty And Personal Care; Home Furnishing; Kitchen & Dining; Computers; Watches; Baby Care; Tools & Hardware; Toys & School Supplies; Pens & Stationery; Bags, Wallets & Belts; Furniture; Sports & Fitness; Home Improvement; Cameras & Accessories; Health & Personal Care Appliances; Sunglasses; Gaming; Pet Supplies; Home & Kitchen; Home Entertainment; Ebooks; Eyewear; Household Supplies; Wearable Smart Devices; Food & Nutrition; Automation & Robotics. For the "category" filter, pick the closest match from this list, or leave "category" null if none fits — never invent a category string.
       |- All prices and budgets are in Indian Rupees (INR, ₹). Interpret budget figures as ₹ and use ₹ when mentioning prices in responses.
-      |- If the user states a budget in dollars ($ or "dollars"), convert it to INR before setting the "budget" filter (approximate rate: $1 ≈ ₹83) and mention the ₹ amount in your response.
+      |- If the user states a budget in dollars ($ or "dollars"), convert it to INR before setting the "budget" filter (approximate rate: $1 ≈ ₹83) and mention the ₹ amount in your response. A bare number with no currency symbol or word (e.g. "under 2000") is already INR — use it as-is, never convert it.
+      |- NEVER quote specific price or budget figures in "assistantResponse" — the backend appends an authoritative filter summary with exact ₹ amounts. Say "under your budget" instead of inventing a number.
       |
       |OUTPUT FORMAT:
       |Respond ONLY with a valid JSON object matching this exact shape, with no markdown code fences or extra prose:
