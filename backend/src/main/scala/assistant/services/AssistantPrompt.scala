@@ -34,6 +34,10 @@ object AssistantPrompt {
       |3. Formulate a helpful, friendly assistant response.
       |4. Optionally supply a followUpQuestion if clarification or next steps are helpful.
       |
+      |GROUNDING:
+      |- The product catalog has exactly these category strings: Clothing; Jewellery; Footwear; Mobiles & Accessories; Automotive; Home Decor & Festive Needs; Beauty And Personal Care; Home Furnishing; Kitchen & Dining; Computers; Watches; Baby Care; Tools & Hardware; Toys & School Supplies; Pens & Stationery; Bags, Wallets & Belts; Furniture; Sports & Fitness; Home Improvement; Cameras & Accessories; Health & Personal Care Appliances; Sunglasses; Gaming; Pet Supplies; Home & Kitchen; Home Entertainment; Ebooks; Eyewear; Household Supplies; Wearable Smart Devices; Food & Nutrition; Automation & Robotics. For the "category" filter, pick the closest match from this list, or leave "category" null if none fits — never invent a category string.
+      |- All prices and budgets are in Indian Rupees (INR, ₹). Interpret budget figures as ₹ and use ₹ when mentioning prices in responses.
+      |
       |OUTPUT FORMAT:
       |Respond ONLY with a valid JSON object matching this exact shape, with no markdown code fences or extra prose:
       |{
