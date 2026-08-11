@@ -2,21 +2,27 @@ package assistant.http
 
 import assistant.auth.authed
 import assistant.auth.JwtService
-import assistant.domain.{SendMessageRequest, ValidationFailure}
-import assistant.services.MessageValidationService
+import assistant.domain.{SendMessageRequest, ValidationFailure, ValidationPassResponse}
+import assistant.services.{ConversationService, MessageValidationService}
 import upickle.default.{read, writeJs}
 
-/** Thin HTTP layer for the chat message endpoint (docs/call1Plan.md §7
-  * step 7). Parses the body, calls `MessageValidationService`, maps the
-  * `Either` to status + JSON — the same pattern as `AuthRoutes`.
+/** Thin HTTP layer for the chat message endpoint (docs/conversationPlan.md
+  * §7, §8 task 10). Parses the body, runs the regex pre-filter → Call #1
+  * (`MessageValidationService`), then commits the approved message
+  * (`ConversationService.commitUserTurn`) and returns the §6 extended
+  * pass body — the same `Either`→status+JSON pattern as `AuthRoutes`.
   *
-  * `POST /api/sessions/{sessionId}/messages` runs the regex pre-filter →
-  * Call #1 (`PromptValidator`) and returns either the temporary
-  * `ValidationPassResponse` stub (`200`) or `422 REJECTED`. This pass
-  * `sessionId` is echoed from the path and is **not** looked up (no
-  * persistence / ownership yet). A valid JWT is required via `@authed`.
+  * `POST /api/sessions/{sessionId}/messages`: blank/regex/unsafe → `400` or
+  * `422 REJECTED` (nothing written); ownership failures from
+  * `commitUserTurn` → `403 FORBIDDEN` / `404 SESSION_NOT_FOUND`; success →
+  * `200` with `conversationId` + the persisted `userMessage`. A valid JWT is
+  * required via `@authed`.
   */
-case class MessageRoutes(jwt: JwtService, validation: MessageValidationService)(implicit
+case class MessageRoutes(
+    jwt: JwtService,
+    validation: MessageValidationService,
+    conversations: ConversationService
+)(implicit
     cc: castor.Context,
     log: cask.Logger
 ) extends cask.Routes {
@@ -36,7 +42,23 @@ case class MessageRoutes(jwt: JwtService, validation: MessageValidationService)(
       case Right(req) =>
         validation.validate(req.message, sessionId) match {
           case Left(failure) => errorJson(failure)
-          case Right(pass)   => json(200, writeJs(pass))
+          case Right(_) =>
+            conversations.commitUserTurn(sessionId, userId, req.message) match {
+              case Left(failure) => errorJson(failure)
+              case Right(turn) =>
+                json(
+                  200,
+                  writeJs(
+                    ValidationPassResponse(
+                      safe = true,
+                      sessionId = sessionId,
+                      conversationId = turn.conversationId,
+                      message = req.message,
+                      userMessage = turn.userMessage
+                    )
+                  )
+                )
+            }
         }
     }
 

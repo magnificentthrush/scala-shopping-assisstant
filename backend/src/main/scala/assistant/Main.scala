@@ -5,8 +5,21 @@ import java.util.concurrent.CountDownLatch
 import assistant.auth.JwtService
 import assistant.config.AppConfig
 import assistant.http.{AuthRoutes, Cors, HealthRoutes, MessageRoutes}
-import assistant.repo.{SupabaseRestClient, UserRepo}
-import assistant.services.{AuthService, EmailService, GeminiLLMClient, MessageValidationService}
+import assistant.repo.{
+  ChatSessionRepo,
+  ConversationRepo,
+  ConversationStateRepo,
+  MessageRepo,
+  SupabaseRestClient,
+  UserRepo
+}
+import assistant.services.{
+  AuthService,
+  ConversationService,
+  EmailService,
+  GeminiLLMClient,
+  MessageValidationService
+}
 
 /** Backend entrypoint. Wires config → repos/services → HTTP routes and
   * applies app-wide CORS (docs/authPlan.md §7 step 13).
@@ -28,11 +41,24 @@ object Main extends cask.Main {
   private val llmClient = new GeminiLLMClient(config.gemmaApiKey)
   private val messageValidationService = new MessageValidationService(llmClient)
 
+  // Six endpoints' repos share one PostgREST client, same as `authService`.
+  private val rest = new SupabaseRestClient(config)
+  private val conversationService = new ConversationService(
+    chatSessions = new ChatSessionRepo(rest),
+    conversations = new ConversationRepo(rest),
+    conversationStates = new ConversationStateRepo(rest),
+    messages = new MessageRepo(rest)
+  )
+
   override def mainDecorators: Seq[cask.RawDecorator] =
     Seq(new Cors(config.frontendUrl))
 
   override def allRoutes: Seq[cask.Routes] =
-    Seq(HealthRoutes(), AuthRoutes(authService), MessageRoutes(jwt, messageValidationService))
+    Seq(
+      HealthRoutes(),
+      AuthRoutes(authService),
+      MessageRoutes(jwt, messageValidationService, conversationService)
+    )
 
   override def main(args: Array[String]): Unit = {
     val publicUrl = sys.env.getOrElse("BACKEND_URL", s"http://localhost:$port")

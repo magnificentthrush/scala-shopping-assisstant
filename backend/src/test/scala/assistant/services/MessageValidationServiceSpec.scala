@@ -22,7 +22,7 @@ private class ValidationThrowingLLMClient(error: Throwable) extends LLMClient {
 
 /** Unit tests for the `MessageValidationService` orchestration
   * (docs/call1Plan.md §5): blank → 400, regex → 422 REJECTED, Call #1
-  * fail-closed → 422 REJECTED, Call #1 pass → the temporary stub body.
+  * fail-closed → 422 REJECTED, Call #1 pass → `Right(())`.
   * No network — a fake `LLMClient` stands in for the real Gemini/Gemma API.
   */
 class MessageValidationServiceSpec extends AnyFunSuite with Matchers {
@@ -84,16 +84,13 @@ class MessageValidationServiceSpec extends AnyFunSuite with Matchers {
     failure.code shouldBe Some("REJECTED")
   }
 
-  test("returns the temporary pass body for a Call #1 safe:true verdict") {
+  test("passes a Call #1 safe:true verdict with Right(())") {
     val client = new ValidationFakeLLMClient(safeResponse)
     val service = new MessageValidationService(client)
 
     val result = service.validate("Under $120 and waterproof", sessionId)
 
-    val pass = result.toOption.get
-    pass.safe shouldBe true
-    pass.sessionId shouldBe sessionId
-    pass.message shouldBe "Under $120 and waterproof"
+    result shouldBe Right(())
     client.calls shouldBe 1
   }
 }
