@@ -91,12 +91,11 @@ input:focus-visible {
 .brand-logo img {
   display: block;
   width: auto;
-  height: 44px;
+  height: 64px;
   object-fit: contain;
 }
-
 .brand-logo--compact img {
-  height: 32px;
+  height: 48px;
 }
 
 .brand-logo__dark {
@@ -1479,4 +1478,25 @@ input:focus-visible {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+  .message__edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.message__edit textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color, #333);
+  background: var(--bg-surface, #1a1a1a);
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  resize: vertical;
+}
+.message__edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
 }

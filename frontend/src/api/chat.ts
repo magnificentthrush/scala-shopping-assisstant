@@ -2,7 +2,23 @@
 import { apiFetch } from "./client";
 import type { Message, Product } from "../types";
 import { registerMockConversation, touchMockConversation, appendMockMessages } from "./conversations";
+import { mockProducts } from "../mocks/mockProducts";
 
+// Very simple keyword + budget matcher
+function findMatchingProducts(message: string) {
+  const lower = message.toLowerCase();
+  const budgetMatch = lower.match(/\$?(\d+)/);
+  const budget = budgetMatch ? parseInt(budgetMatch[1]) : null;
+
+  const matches = mockProducts.filter((p) => {
+    const searchable = `${p.name} ${p.brand} ${p.category}`.toLowerCase();
+    const keywordMatch = lower.split(" ").some((word) => word.length > 2 && searchable.includes(word));
+    const withinBudget = budget ? p.price <= budget : true;
+    return keywordMatch && withinBudget;
+  });
+
+  return matches.slice(0, 5);
+}
 const USE_MOCK_API = true;
 
 interface StartConversationResponse {
@@ -53,13 +69,18 @@ export async function sendMessage(
       sequenceNumber: 1,
       createdAt: new Date().toISOString(),
     };
+   const matchedProducts = findMatchingProducts(message);
+    const replyText = matchedProducts.length > 0
+      ? `Here are ${matchedProducts.length} options that match what you're looking for.`
+      : "I couldn't find a match — try a different keyword or budget.";
+
     const assistantMessage: Message = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content: "This is a mock reply — the real chat backend isn't wired up yet.",
+      content: replyText,
       sequenceNumber: 2,
       createdAt: new Date().toISOString(),
-      products: [],
+      products: matchedProducts,
     };
 
     // Save both turns into the conversation's history
@@ -69,9 +90,9 @@ export async function sendMessage(
       sessionId,
       conversationId,
       mode: "info",
-      reply: assistantMessage.content,
+      reply: replyText,
       followUpQuestion: null,
-      products: [],
+      products: matchedProducts,
       userMessage,
       assistantMessage,
     };
