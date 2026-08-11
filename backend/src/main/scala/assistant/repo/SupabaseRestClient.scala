@@ -73,12 +73,18 @@ class SupabaseRestClient(config: AppConfig) {
   }
 
   /** `DELETE {table}?{params}` — deletes matching row(s). `params` are
-    * PostgREST filters, e.g. `Map("id" -> s"eq.$id")`. PostgREST returns
-    * an empty body for a successful delete.
+    * PostgREST filters, e.g. `Map("id" -> s"eq.$id")`. `Prefer:
+    * return=representation` makes PostgREST echo the deleted row(s) back as
+    * a JSON array (empty if none matched), so `ConversationRepo.delete` can
+    * tell "deleted something" from "matched nothing" — same convention as
+    * `post`/`patch`.
     */
   def delete(table: String, params: Map[String, String]): String = {
     val uri = uri"$baseUrl/$table?$params"
-    val response = basicRequest.headers(authHeaders).delete(uri).send(backend)
+    val response = basicRequest
+      .headers(authHeaders ++ Map("Prefer" -> "return=representation"))
+      .delete(uri)
+      .send(backend)
     bodyOrThrow(response, s"DELETE $table")
   }
 

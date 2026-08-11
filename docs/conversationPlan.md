@@ -246,8 +246,8 @@ sequenceDiagram
 3. `git add data/migrations/ data/scripts/apply_migrations.py data/seed/ data/.gitignore` and commit DONE — the whole team needs these files, not just this machine.
 4. **Done** — `docs/API_CONTRACT.md`: `POST /api/conversations` response now `conversationId: null`; messages temp `200` extended with `conversationId` + persisted `userMessage`; `403 FORBIDDEN` / `404 SESSION_NOT_FOUND` now enforced in the error table.
 5. **Done** — `assistant/repo/SupabaseRestClient.scala`: `delete(table, params): String` added.
-6. `assistant/domain/Conversation.scala` — all domain + API types from §5, with `macroRW` `ReadWriter`s and `@key` snake_case mappings.
-7. `assistant/repo/ChatSessionRepo.scala`, `ConversationRepo.scala`, `MessageRepo.scala` (+ `ConversationStateRepo` if kept separate) — per §5.
+6. **Done** — `assistant/domain/Conversation.scala`: DB shapes (`Conversation`, `ConversationState`, `ChatSession`, `MessageRow`) with `@key` snake_case mappings + `macroRW`; API shapes (`ConversationSummary`, `MessageResponse`, `StartConversationResponse`, `ConversationsListResponse`, `ResumeConversationResponse`, `RenameConversationRequest`) + internal `CommittedTurn`.
+7. **Done** — `assistant/repo/ChatSessionRepo.scala`, `ConversationRepo.scala`, `ConversationStateRepo.scala`, `MessageRepo.scala` per §5 (PostgREST via `SupabaseRestClient`; `SupabaseRestClient.delete` uses `Prefer: return=representation` so `ConversationRepo.delete` returns whether a row matched; touch updates compute `now()`/`+30min` in Scala since PostgREST won't evaluate SQL expressions in bodies).
 8. `assistant/services/ConversationService.scala` — five CRUD methods + `commitUserTurn`, per §5.
 9. Refactor `assistant/services/MessageValidationService.scala` — `validate` returns `Either[ValidationFailure, Unit]` (safety only, no more `ValidationPassResponse` construction); update `MessageValidationServiceSpec`.
 10. `assistant/http/MessageRoutes.scala` — chain `MessageValidationService.validate` → `ConversationService.commitUserTurn` → build the extended response from §6.
