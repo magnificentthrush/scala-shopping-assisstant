@@ -72,6 +72,16 @@ class SupabaseRestClient(config: AppConfig) {
     bodyOrThrow(response, s"PATCH $table")
   }
 
+  /** `DELETE {table}?{params}` — deletes matching row(s). `params` are
+    * PostgREST filters, e.g. `Map("id" -> s"eq.$id")`. PostgREST returns
+    * an empty body for a successful delete.
+    */
+  def delete(table: String, params: Map[String, String]): String = {
+    val uri = uri"$baseUrl/$table?$params"
+    val response = basicRequest.headers(authHeaders).delete(uri).send(backend)
+    bodyOrThrow(response, s"DELETE $table")
+  }
+
   private def bodyOrThrow(response: Response[Either[String, String]], context: String): String =
     response.body match {
       case Right(body) => body

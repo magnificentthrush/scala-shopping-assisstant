@@ -51,28 +51,32 @@ This plan originally assumed no migrations existed anywhere and needed to be wri
 
 One doc correction is still outstanding — not a schema issue, just a stale example:
 
-| File | Current text | Corrected to | Why |
-| --- | --- | --- | --- |
+
+| File                                                   | Current text                            | Corrected to             | Why                                                                                                                                                                                                           |
+| ------------------------------------------------------ | --------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `API_CONTRACT.md` — `POST /api/conversations` response | `"conversationId": "uuid-conversation"` | `"conversationId": null` | Per `ARCHITECTURE.md` §4, starting a chat only creates a `chat_sessions` row; there is no `conversations` row yet. The frontend should not expect a real conversation id until the first message is accepted. |
+
 
 ---
 
 ## 3. Key technical decisions
 
-| Decision | Choice | Why |
-| --- | --- | --- |
-| Migration runner | Already exists: `data/scripts/apply_migrations.py` (Python, `psycopg2-binary`), reads `SUPABASE_DB_URL`. It was gitignored; now tracked. | Verified directly against the live Supabase project (§2) — no need to rebuild it. |
-| `chat_sessions.conversation_id` nullability | Fixed via a real corrective migration, `008_chat_sessions_conversation_id_nullable.sql`, applied to shared dev (§2) | The live column was genuinely `NOT NULL`; lazy-create needs it nullable. A doc edit alone would not have fixed the actual database. |
-| DB access for new repos | PostgREST via `SupabaseRestClient` — same as `UserRepo`; **not** direct JDBC | Matches the established rule (`project-plan.md` §5): Supabase REST client for app queries, a direct Postgres connection only for the migration runner. `SupabaseRestClient` gains one new method: `delete`. |
-| Message pipeline split | `MessageValidationService.validate` becomes safety-only (blank / regex / Call #1) → `Either[ValidationFailure, Unit]`. New `ConversationService.commitUserTurn` does ownership + lazy-create + persistence. | Single responsibility: safety-checking has zero DB dependency and stays trivially unit-testable with a fake `LLMClient`; persistence is a separate concern with its own failure modes (404/403). |
-| Ownership check | Resolve `sessionId` → `chat_sessions` row → compare `user_id` to the JWT subject. No row → `404 SESSION_NOT_FOUND`. Row belongs to someone else → `403 FORBIDDEN`. | `ARCHITECTURE.md` §3: mandatory IDOR check before touching any other data. Distinguishing 404 vs 403 also matches the resume-endpoint error table already frozen in `API_CONTRACT.md`. |
-| Lazy-create concurrency | Check-then-insert on `chat_sessions.conversation_id` (`if None, create`); **no** pessimistic row lock this pass | The race `ARCHITECTURE.md` §4 requires `FOR UPDATE` for is the **filters** read-modify-write, which doesn't exist until Call #2 writes `conversation_state.filters`. Full transactional locking is explicitly deferred to the Call #2 plan — see §8. |
-| Phase-A commit atomicity | Sequential PostgREST calls (lazy-create conversation → lazy-create state → set session's `conversation_id` → insert message → touch `last_message_at`/`last_active_at`), not one DB transaction | The app has no ambient multi-table transaction mechanism over PostgREST. Documented risk: a crash mid-sequence can leave a conversation with no messages yet. This is no worse than the pre-message gap the lazy-create design already accepts, and is not adversarially triggerable. A single-RPC atomic version is a §8 follow-up, not required now. |
-| Response shape this pass | Extend `ValidationPassResponse` with a real `conversationId` and the persisted `userMessage` (id, role, content, sequenceNumber, createdAt) | The message is now genuinely durable, so the stub should say so — but still no `mode`/`reply`/`products`/`assistantMessage`, since Call #2 hasn't run. |
-| Sequence numbers | `max(sequence_number) + 1` per conversation (or `1` if none), computed with a PostgREST query (`order=sequence_number.desc&limit=1`), not a DB sequence/trigger | Keeps the `messages` schema exactly as documented in `database-schema.md`; safe because this pass only ever writes one row per request. |
-| Session activity touch | `chat_sessions.last_active_at = now()`, `expires_at = now() + 30 minutes` on every accepted message | `ARCHITECTURE.md` §4 per-message flow, step 2. Cheap, no dependency on anything else in this plan. |
-| Session-expiry auto-rollover | Deferred | Adds UX complexity (silently minting a new session mid-conversation) with no payoff before Call #2 exists to actually drive longer sessions. |
-| `ValidationFailure` reuse | Keep the existing `assistant.domain.ValidationFailure(status, error, code)` type; `ConversationService` reuses it instead of inventing a parallel failure type | It's already a generic "HTTP-mappable failure" shape with nothing Call#1-specific about its fields; one failure type keeps route-mapping code identical across `MessageRoutes` and the new `ConversationRoutes`. |
+
+| Decision                                    | Choice                                                                                                                                                                                                      | Why                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Migration runner                            | Already exists: `data/scripts/apply_migrations.py` (Python, `psycopg2-binary`), reads `SUPABASE_DB_URL`. It was gitignored; now tracked.                                                                    | Verified directly against the live Supabase project (§2) — no need to rebuild it.                                                                                                                                                                                                                                                                      |
+| `chat_sessions.conversation_id` nullability | Fixed via a real corrective migration, `008_chat_sessions_conversation_id_nullable.sql`, applied to shared dev (§2)                                                                                         | The live column was genuinely `NOT NULL`; lazy-create needs it nullable. A doc edit alone would not have fixed the actual database.                                                                                                                                                                                                                    |
+| DB access for new repos                     | PostgREST via `SupabaseRestClient` — same as `UserRepo`; **not** direct JDBC                                                                                                                                | Matches the established rule (`project-plan.md` §5): Supabase REST client for app queries, a direct Postgres connection only for the migration runner. `SupabaseRestClient` gains one new method: `delete`.                                                                                                                                            |
+| Message pipeline split                      | `MessageValidationService.validate` becomes safety-only (blank / regex / Call #1) → `Either[ValidationFailure, Unit]`. New `ConversationService.commitUserTurn` does ownership + lazy-create + persistence. | Single responsibility: safety-checking has zero DB dependency and stays trivially unit-testable with a fake `LLMClient`; persistence is a separate concern with its own failure modes (404/403).                                                                                                                                                       |
+| Ownership check                             | Resolve `sessionId` → `chat_sessions` row → compare `user_id` to the JWT subject. No row → `404 SESSION_NOT_FOUND`. Row belongs to someone else → `403 FORBIDDEN`.                                          | `ARCHITECTURE.md` §3: mandatory IDOR check before touching any other data. Distinguishing 404 vs 403 also matches the resume-endpoint error table already frozen in `API_CONTRACT.md`.                                                                                                                                                                 |
+| Lazy-create concurrency                     | Check-then-insert on `chat_sessions.conversation_id` (`if None, create`); **no** pessimistic row lock this pass                                                                                             | The race `ARCHITECTURE.md` §4 requires `FOR UPDATE` for is the **filters** read-modify-write, which doesn't exist until Call #2 writes `conversation_state.filters`. Full transactional locking is explicitly deferred to the Call #2 plan — see §8.                                                                                                   |
+| Phase-A commit atomicity                    | Sequential PostgREST calls (lazy-create conversation → lazy-create state → set session's `conversation_id` → insert message → touch `last_message_at`/`last_active_at`), not one DB transaction             | The app has no ambient multi-table transaction mechanism over PostgREST. Documented risk: a crash mid-sequence can leave a conversation with no messages yet. This is no worse than the pre-message gap the lazy-create design already accepts, and is not adversarially triggerable. A single-RPC atomic version is a §8 follow-up, not required now. |
+| Response shape this pass                    | Extend `ValidationPassResponse` with a real `conversationId` and the persisted `userMessage` (id, role, content, sequenceNumber, createdAt)                                                                 | The message is now genuinely durable, so the stub should say so — but still no `mode`/`reply`/`products`/`assistantMessage`, since Call #2 hasn't run.                                                                                                                                                                                                 |
+| Sequence numbers                            | `max(sequence_number) + 1` per conversation (or `1` if none), computed with a PostgREST query (`order=sequence_number.desc&limit=1`), not a DB sequence/trigger                                             | Keeps the `messages` schema exactly as documented in `database-schema.md`; safe because this pass only ever writes one row per request.                                                                                                                                                                                                                |
+| Session activity touch                      | `chat_sessions.last_active_at = now()`, `expires_at = now() + 30 minutes` on every accepted message                                                                                                         | `ARCHITECTURE.md` §4 per-message flow, step 2. Cheap, no dependency on anything else in this plan.                                                                                                                                                                                                                                                     |
+| Session-expiry auto-rollover                | Deferred                                                                                                                                                                                                    | Adds UX complexity (silently minting a new session mid-conversation) with no payoff before Call #2 exists to actually drive longer sessions.                                                                                                                                                                                                           |
+| `ValidationFailure` reuse                   | Keep the existing `assistant.domain.ValidationFailure(status, error, code)` type; `ConversationService` reuses it instead of inventing a parallel failure type                                              | It's already a generic "HTTP-mappable failure" shape with nothing Call#1-specific about its fields; one failure type keeps route-mapping code identical across `MessageRoutes` and the new `ConversationRoutes`.                                                                                                                                       |
+
 
 ---
 
@@ -110,11 +114,11 @@ Field names camelCase in Scala, `@key(...)` mapping to the snake_case PostgREST 
 
 ### Repos (`assistant/repo/`, new files, PostgREST via `SupabaseRestClient`)
 
-- **`ChatSessionRepo`**: `insert(userId): ChatSession`, `findById(sessionId): Option[ChatSession]`, `setConversationId(sessionId, conversationId): Unit`, `touchActivity(sessionId): Unit`
-- **`ConversationRepo`**: `insert(userId): Conversation`, `findById(conversationId): Option[Conversation]`, `listByUser(userId): Seq[Conversation]` (ordered `last_message_at DESC`), `updateTitle(conversationId, userId, title): Option[Conversation]` (`WHERE id=eq AND user_id=eq`, ownership enforced in the query itself, belt-and-suspenders with the service-level check), `delete(conversationId, userId): Boolean`, `touchLastMessageAt(conversationId): Unit`
-- **`ConversationStateRepo`** (or a method on `ConversationRepo` — decide at implementation time): `insertEmpty(conversationId): Unit`
-- **`MessageRepo`**: `nextSequenceNumber(conversationId): Int`, `insertUserMessage(conversationId, content): MessageRow`, `listByConversation(conversationId): Seq[MessageRow]` (ordered `sequence_number ASC`, for resume)
-- **`SupabaseRestClient`** (edit): add `def delete(table: String, params: Map[String, String]): String`, following the same header/URI pattern as `get`/`post`/`patch`
+- `**ChatSessionRepo**`: `insert(userId): ChatSession`, `findById(sessionId): Option[ChatSession]`, `setConversationId(sessionId, conversationId): Unit`, `touchActivity(sessionId): Unit`
+- `**ConversationRepo**`: `insert(userId): Conversation`, `findById(conversationId): Option[Conversation]`, `listByUser(userId): Seq[Conversation]` (ordered `last_message_at DESC`), `updateTitle(conversationId, userId, title): Option[Conversation]` (`WHERE id=eq AND user_id=eq`, ownership enforced in the query itself, belt-and-suspenders with the service-level check), `delete(conversationId, userId): Boolean`, `touchLastMessageAt(conversationId): Unit`
+- `**ConversationStateRepo**` (or a method on `ConversationRepo` — decide at implementation time): `insertEmpty(conversationId): Unit`
+- `**MessageRepo**`: `nextSequenceNumber(conversationId): Int`, `insertUserMessage(conversationId, content): MessageRow`, `listByConversation(conversationId): Seq[MessageRow]` (ordered `sequence_number ASC`, for resume)
+- `**SupabaseRestClient**` (edit): add `def delete(table: String, params: Map[String, String]): String`, following the same header/URI pattern as `get`/`post`/`patch`
 
 ### `ConversationService` (`assistant/services/ConversationService.scala`, new file)
 
@@ -177,10 +181,12 @@ Same `404`/`403` ownership pattern as resume.
 
 Errors add two new codes on top of `call1Plan.md`'s `400`/`401`/`422`:
 
-| Status | `code` | When |
-| --- | --- | --- |
-| `403` | `FORBIDDEN` | `sessionId` exists but belongs to a different user |
-| `404` | `SESSION_NOT_FOUND` | `sessionId` does not exist |
+
+| Status | `code`              | When                                               |
+| ------ | ------------------- | -------------------------------------------------- |
+| `403`  | `FORBIDDEN`         | `sessionId` exists but belongs to a different user |
+| `404`  | `SESSION_NOT_FOUND` | `sessionId` does not exist                         |
+
 
 ---
 
@@ -229,15 +235,17 @@ sequenceDiagram
     end
 ```
 
+
+
 ---
 
 ## 8. Sequenced task list (build in this order)
 
 1. **[This document]** `docs/conversationPlan.md` — Done (this file).
 2. **Done** — `database-schema.md` corrected (`chat_sessions.conversation_id` nullable + migration list); `008_chat_sessions_conversation_id_nullable.sql` written and applied to shared dev Supabase (verified via `information_schema.columns`); `data/.gitignore` fixed so migrations/scripts/seed are trackable.
-3. `git add data/migrations/ data/scripts/apply_migrations.py data/seed/ data/.gitignore` and commit — the whole team needs these files, not just this machine.
-4. Update `docs/API_CONTRACT.md` — the one remaining correction from §2 (`POST /api/conversations` response `conversationId: null`), plus the new `403 FORBIDDEN` / `404 SESSION_NOT_FOUND` codes on the messages endpoint (§6).
-5. `assistant/repo/SupabaseRestClient.scala` — add `delete(table, params): String`.
+3. `git add data/migrations/ data/scripts/apply_migrations.py data/seed/ data/.gitignore` and commit DONE — the whole team needs these files, not just this machine.
+4. **Done** — `docs/API_CONTRACT.md`: `POST /api/conversations` response now `conversationId: null`; messages temp `200` extended with `conversationId` + persisted `userMessage`; `403 FORBIDDEN` / `404 SESSION_NOT_FOUND` now enforced in the error table.
+5. **Done** — `assistant/repo/SupabaseRestClient.scala`: `delete(table, params): String` added.
 6. `assistant/domain/Conversation.scala` — all domain + API types from §5, with `macroRW` `ReadWriter`s and `@key` snake_case mappings.
 7. `assistant/repo/ChatSessionRepo.scala`, `ConversationRepo.scala`, `MessageRepo.scala` (+ `ConversationStateRepo` if kept separate) — per §5.
 8. `assistant/services/ConversationService.scala` — five CRUD methods + `commitUserTurn`, per §5.
