@@ -5,23 +5,27 @@ headers:
   Content-Type: application/json
 body:
   type: json
-  content: '{"fullName":"Postman Test User","email":"{{registerEmail}}","password":"Password1"}'
+  content: '{"fullName":"Postman Test
+    User","email":"{{registerEmail}}","password":"Password1"}'
 scripts:
   - type: beforeRequest
-    code: |-
-      pm.collectionVariables.set('registerEmail', 'postman-' + Date.now() + '@scalainterns.dev');
+    code: pm.collectionVariables.set('registerEmail', 'postman-' + Date.now() +
+      '@scalainterns.dev');
     language: text/javascript
   - type: afterResponse
-    code: |-
+    code: >-
       pm.test('Status 201', function () {
         pm.response.to.have.status(201);
       });
+
       pm.test('Returns user and needsVerification', function () {
         const body = pm.response.json();
         pm.expect(body.user.fullName).to.eql('Postman Test User');
         pm.expect(body.needsVerification).to.eql(true);
       });
-      pm.test('Captures verification token for the verify-email call', function () {
+
+      pm.test('Captures verification token for the verify-email call', function
+      () {
         const body = pm.response.json();
         if (body.verificationToken) {
           pm.collectionVariables.set('verificationToken', body.verificationToken);

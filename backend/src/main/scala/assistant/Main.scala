@@ -58,7 +58,8 @@ object Main extends cask.Main {
     llmClient,
     productProvider,
     conversationStateRepo,
-    messageRepo
+    messageRepo,
+    new ConversationRepo(rest)
   )
 
   override def mainDecorators: Seq[cask.RawDecorator] =

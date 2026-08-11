@@ -2,4 +2,8 @@ $kind: collection
 name: mine collection
 description: ShopPilot backend API test suite. Run sequentially using Postman Collection Runner.
 variables:
-  session_id: ""
+  - key: session_id
+    value: ""
+    secret: false
+  - key: bearer_token_0ocl
+    secret: true

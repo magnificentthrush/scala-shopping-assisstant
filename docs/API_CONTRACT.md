@@ -57,7 +57,9 @@ type Message = {
 
 type ConversationSummary = {
   id: string
-  title: string | null
+  title: string | null   // NULL until the first answered turn auto-fills it from
+                         // Call #2 filters (e.g. "Hiking shoes · under ₹9,960"),
+                         // or the user renames it. A manual rename always wins.
   createdAt: string
   updatedAt: string
   lastMessageAt: string

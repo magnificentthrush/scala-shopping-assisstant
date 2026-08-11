@@ -82,4 +82,45 @@ class AssistantPromptSpec extends AnyFunSuite with Matchers {
       AssistantPrompt.parse(rawJson)
     }
   }
+
+  test("JSON output contract is unchanged: same fields, same types") {
+    val rawJson =
+      """{
+        |  "mode": "recommend",
+        |  "filters": {
+        |    "category": "Footwear",
+        |    "budget": 5000.0,
+        |    "keywords": ["running"],
+        |    "attributes": { "size": "9" }
+        |  },
+        |  "assistantResponse": "Here are running shoes under ₹5000.",
+        |  "followUpQuestion": "Any brand preference?"
+        |}""".stripMargin
+
+    val result = AssistantPrompt.parse(rawJson)
+
+    // Exactly the contract fields, each with its declared type.
+    result.mode shouldBe a[String]
+    result.mode shouldBe "recommend"
+    result.filters.category shouldBe a[Some[_]]
+    result.filters.category.get shouldBe a[String]
+    result.filters.budget shouldBe a[Some[_]]
+    result.filters.budget.get shouldBe a[BigDecimal]
+    result.filters.keywords shouldBe a[List[_]]
+    all(result.filters.keywords) shouldBe a[String]
+    result.filters.attributes shouldBe a[Map[_, _]]
+    result.filters.attributes.foreach { case (k, v) =>
+      k shouldBe a[String]
+      v shouldBe a[String]
+    }
+    result.assistantResponse shouldBe a[String]
+    result.followUpQuestion shouldBe a[Some[_]]
+    result.followUpQuestion.get shouldBe a[String]
+
+    // Values round-trip with no reshaping.
+    result.filters.category shouldBe Some("Footwear")
+    result.filters.budget shouldBe Some(BigDecimal("5000.0"))
+    result.filters.keywords shouldBe List("running")
+    result.filters.attributes shouldBe Map("size" -> "9")
+  }
 }

@@ -62,6 +62,23 @@ class ConversationRepo(client: SupabaseRestClient) {
     read[Seq[Conversation]](json).headOption
   }
 
+  /** Auto-title: set `title` only when it is still NULL. The `title=is.null`
+    * filter in the WHERE clause makes this atomic — a row already titled (by
+    * an earlier auto-title or a user rename) matches zero rows and is left
+    * alone, so a user's manual rename can never be overwritten by this.
+    * Returns the updated row, or `None` if the conversation was already titled.
+    * Unlike `updateTitle`, this does NOT bump `updated_at` — it's a system
+    * fill-in, not a user edit, and shouldn't reorder the sidebar.
+    */
+  def setTitleIfNull(conversationId: String, title: String): Option[Conversation] = {
+    val json = client.patch(
+      Table,
+      Map("id" -> s"eq.$conversationId", "title" -> "is.null"),
+      ujson.Obj("title" -> title).toString
+    )
+    read[Seq[Conversation]](json).headOption
+  }
+
   /** Hard delete (ON DELETE CASCADE takes messages/state/sessions with it).
     * Returns `true` iff a row owned by `userId` was actually deleted.
     */

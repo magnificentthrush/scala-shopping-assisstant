@@ -5,6 +5,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 import upickle.default._
 
+import scala.collection.mutable.ListBuffer
+
 class SupabaseProductProviderSpec extends AnyFunSuite with Matchers {
 
   private val dummyConfig = assistant.config.AppConfig(
@@ -18,20 +20,41 @@ class SupabaseProductProviderSpec extends AnyFunSuite with Matchers {
     gemmaApiKey = ""
   )
 
+  /** Records every call; each call dequeues the next queued response
+    * (defaults to `[]` when the queue runs dry).
+    */
   class CapturingRestClient extends SupabaseRestClient(dummyConfig) {
-    var lastTable: String = ""
-    var lastParams: Map[String, String] = Map.empty
-    var responseToReturn: String = "[]"
+    val calls: ListBuffer[Map[String, String]] = ListBuffer.empty
+    private val responses: scala.collection.mutable.Queue[String] = scala.collection.mutable.Queue.empty
+
+    def enqueueResponse(json: String): Unit = responses.enqueue(json)
 
     override def get(table: String, params: Map[String, String]): String = {
-      lastTable = table
-      lastParams = params
-      responseToReturn
+      calls += params
+      if (responses.nonEmpty) responses.dequeue() else "[]"
     }
   }
 
-  test("search constructs plfts search_vector and price=lte parameter when budget is present") {
+  private val OneProductJson =
+    """[
+      |  {
+      |    "id": "p1",
+      |    "name": "Hiking Shoe",
+      |    "brand": "OutdoorBrand",
+      |    "category": "Footwear",
+      |    "price": 89.99,
+      |    "original_price": 109.99,
+      |    "rating": "4.2",
+      |    "description": "Sturdy boot",
+      |    "image_url": "http://img.jpg",
+      |    "product_url": "http://prod.com",
+      |    "product_specifications": null
+      |  }
+      |]""".stripMargin
+
+  test("rung 1: strict plfts + price=lte, short-circuits when non-empty") {
     val client = new CapturingRestClient
+    client.enqueueResponse(OneProductJson)
     val provider = new SupabaseProductProvider(client)
 
     val filters = ExtractedFilters(
@@ -41,17 +64,20 @@ class SupabaseProductProviderSpec extends AnyFunSuite with Matchers {
       attributes = Map("color" -> "black")
     )
 
-    provider.search(filters, limit = 15)
+    val products = provider.search(filters, limit = 15)
 
-    client.lastTable shouldBe "products"
-    client.lastParams("category") shouldBe "not.is.null"
-    client.lastParams("price") shouldBe "lte.120.00"
-    client.lastParams("limit") shouldBe "15"
-    client.lastParams("search_vector") shouldBe "plfts(english).Footwear hiking waterproof black"
+    products.length shouldBe 1
+    client.calls.length shouldBe 1
+    val params = client.calls.head
+    params("category") shouldBe "not.is.null"
+    params("price") shouldBe "lte.120.00"
+    params("limit") shouldBe "15"
+    params("search_vector") shouldBe "plfts(english).Footwear hiking waterproof black"
   }
 
-  test("search uses price=gt.0 when budget is None") {
+  test("rung 1: price=gt.0 when budget is None") {
     val client = new CapturingRestClient
+    client.enqueueResponse(OneProductJson)
     val provider = new SupabaseProductProvider(client)
 
     val filters = ExtractedFilters(
@@ -63,13 +89,14 @@ class SupabaseProductProviderSpec extends AnyFunSuite with Matchers {
 
     provider.search(filters)
 
-    client.lastParams("price") shouldBe "gt.0"
-    client.lastParams("limit") shouldBe "30"
-    client.lastParams("search_vector") shouldBe "plfts(english).running"
+    client.calls.head("price") shouldBe "gt.0"
+    client.calls.head("limit") shouldBe "30"
+    client.calls.head("search_vector") shouldBe "plfts(english).running"
   }
 
-  test("search omits search_vector parameter when search text is empty") {
+  test("rung 1: omits search_vector when search text is empty") {
     val client = new CapturingRestClient
+    client.enqueueResponse(OneProductJson)
     val provider = new SupabaseProductProvider(client)
 
     val filters = ExtractedFilters(
@@ -81,13 +108,157 @@ class SupabaseProductProviderSpec extends AnyFunSuite with Matchers {
 
     provider.search(filters)
 
-    client.lastParams.contains("search_vector") shouldBe false
-    client.lastParams("price") shouldBe "lte.50.00"
+    client.calls.head.contains("search_vector") shouldBe false
+    client.calls.head("price") shouldBe "lte.50.00"
+  }
+
+  test("rung 2: falls back to category=eq + price when rung 1 is empty") {
+    val client = new CapturingRestClient
+    client.enqueueResponse("[]") // rung 1 empty
+    client.enqueueResponse(OneProductJson) // rung 2 hits
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = Some("Kitchen & Dining"),
+      budget = Some(BigDecimal("2000")),
+      keywords = List("kitchen", "knife", "set"),
+      attributes = Map.empty
+    )
+
+    val products = provider.search(filters)
+
+    products.length shouldBe 1
+    client.calls.length shouldBe 2
+    client.calls(1)("category") shouldBe "eq.Kitchen & Dining"
+    client.calls(1)("price") shouldBe "lte.2000"
+    client.calls(1).contains("search_vector") shouldBe false
+  }
+
+  test("rung 3: falls back to websearch on the salient term when rungs 1–2 are empty") {
+    val client = new CapturingRestClient
+    client.enqueueResponse("[]") // rung 1
+    client.enqueueResponse(
+      """[
+        |  {
+        |    "id": "p-wb",
+        |    "name": "Waterproof Hiking Boot",
+        |    "brand": "TrailCo",
+        |    "category": "Footwear",
+        |    "price": 2499,
+        |    "original_price": null,
+        |    "rating": null,
+        |    "description": "Waterproof boot for hiking trails.",
+        |    "image_url": null,
+        |    "product_url": null,
+        |    "product_specifications": null
+        |  }
+        |]""".stripMargin
+    ) // rung 3 hits (rung 2 skipped: no category)
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = None,
+      budget = None,
+      keywords = List("boots", "hiking", "waterproof"),
+      attributes = Map.empty
+    )
+
+    val products = provider.search(filters)
+
+    products.length shouldBe 1
+    client.calls.length shouldBe 2 // rung 1 + rung 3 (rung 2 skipped, no category)
+    client.calls(1)("search_vector") shouldBe "wfts(english).waterproof" // longest term wins
+  }
+
+  test("returns empty when all rungs exhaust") {
+    val client = new CapturingRestClient
+    // all responses default to "[]"
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = Some("Footwear"),
+      budget = Some(BigDecimal("5000")),
+      keywords = List("waterproof", "hiking"),
+      attributes = Map.empty
+    )
+
+    val products = provider.search(filters)
+
+    products shouldBe empty
+    client.calls.length shouldBe 3 // all three rungs attempted
+  }
+
+  test("rung 3 quality gate drops results with no keyword overlap in visible text") {
+    // An electrical switch whose specs say {"Waterproof": "No"} matches FTS
+    // for "waterproof" but shares no vocabulary with "waterproof hiking".
+    val JunkJson =
+      """[
+        |  {
+        |    "id": "junk1",
+        |    "name": "Avita 15 One Way Electrical Switch",
+        |    "brand": "Avita",
+        |    "category": "Home Improvement",
+        |    "price": 57,
+        |    "original_price": null,
+        |    "rating": null,
+        |    "description": "Buy Avita switch online.",
+        |    "image_url": null,
+        |    "product_url": null,
+        |    "product_specifications": "[{\"key\": \"Waterproof\", \"value\": \"No\"}]"
+        |  }
+        |]""".stripMargin
+    val client = new CapturingRestClient
+    client.enqueueResponse("[]") // rung 1
+    client.enqueueResponse(JunkJson) // rung 3 (rung 2 skipped: no category)
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = None,
+      budget = None,
+      keywords = List("waterproof", "hiking"),
+      attributes = Map.empty
+    )
+
+    provider.search(filters) shouldBe empty
+  }
+
+  test("rung 3 quality gate keeps results with keyword overlap in visible text") {
+    val MatchJson =
+      """[
+        |  {
+        |    "id": "ok1",
+        |    "name": "Wildcraft Waterproof Hiking Backpack",
+        |    "brand": "Wildcraft",
+        |    "category": "Bags, Wallets & Belts",
+        |    "price": 1499,
+        |    "original_price": null,
+        |    "rating": null,
+        |    "description": "Waterproof hiking pack.",
+        |    "image_url": null,
+        |    "product_url": null,
+        |    "product_specifications": null
+        |  }
+        |]""".stripMargin
+    val client = new CapturingRestClient
+    client.enqueueResponse("[]") // rung 1
+    client.enqueueResponse(MatchJson) // rung 3
+    val provider = new SupabaseProductProvider(client)
+
+    val filters = ExtractedFilters(
+      category = None,
+      budget = None,
+      keywords = List("waterproof", "hiking"),
+      attributes = Map.empty
+    )
+
+    val products = provider.search(filters)
+    products.length shouldBe 1
+    products.head.id shouldBe "ok1"
   }
 
   test("search correctly parses json into Product sequence") {
     val client = new CapturingRestClient
-    client.responseToReturn =
+    client.enqueueResponse(
       """[
         |  {
         |    "id": "p1",
@@ -103,6 +274,7 @@ class SupabaseProductProviderSpec extends AnyFunSuite with Matchers {
         |    "product_specifications": null
         |  }
         |]""".stripMargin
+    )
 
     val provider = new SupabaseProductProvider(client)
     val products = provider.search(ExtractedFilters(None, None, List("boot"), Map.empty))
