@@ -5,7 +5,8 @@ headers:
   Content-Type: application/json
 body:
   type: json
-  content: '{"fullName":"Postman Test","email":"yawarkamal111@gmail.com","password":"Password1"}'
+  content: '{"fullName":"Postman
+    Test","email":"yawarkamal111@gmail.com","password":"Password1"}'
 scripts:
   - type: afterResponse
     code: |-

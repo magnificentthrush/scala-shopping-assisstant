@@ -6,7 +6,7 @@ headers:
   Authorization: Bearer {{vault:test_token}}
 body:
   type: json
-  content: '{}'
+  content: "{}"
 scripts:
   - type: afterResponse
     code: |-

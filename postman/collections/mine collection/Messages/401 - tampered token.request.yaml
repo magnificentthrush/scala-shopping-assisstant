@@ -3,7 +3,7 @@ url: http://localhost:8080/api/sessions/any-test-session-id/messages
 method: POST
 headers:
   Content-Type: application/json
-  Authorization: Bearer invalid.token.here
+  Authorization: "{{bearer_token_0ocl}}"
 body:
   type: json
   content: '{"message":"Hello"}'
