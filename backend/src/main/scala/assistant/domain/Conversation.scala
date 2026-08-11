@@ -75,15 +75,15 @@ object MessageRow {
 }
 
 /** The API-facing message shape (docs/API_CONTRACT.md §Shared types, §Messages):
-  * id, role, content, sequenceNumber, createdAt — deliberately **no**
-  * `products` field yet (nothing populates it until Call #2).
+  * id, role, content, sequenceNumber, createdAt, products.
   */
 case class MessageResponse(
     id: String,
     role: String,
     content: String,
     sequenceNumber: Int,
-    createdAt: String
+    createdAt: String,
+    products: Seq[Product] = Seq.empty
 )
 
 object MessageResponse {

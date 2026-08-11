@@ -317,8 +317,8 @@ sequenceDiagram
 6. **Done** — `assistant/repo/MessageRepo.scala` — added `recent(conversationId, limit)` and `insertAssistantMessage(conversationId, content, filters)` (via the new `rpc`).
 7. **Done** — `assistant/repo/SupabaseProductProvider.scala` — `ProductProvider` trait + implementation per §4; full-text (`plfts`) + price query logic tested and verified.
 8. **Done** — `assistant/services/Reranker.scala` — deterministic scorer; unit tested with hand-built `Product` fixtures (no DB, no LLM).
-9. `assistant/services/AssistantPrompt.scala` — Call #2 prompt + parsing, mirroring `PromptValidator`'s structure; unit test the JSON-parsing path the same way `PromptValidatorFailClosedSpec` tests parsing (fixed response strings in, no live LLM call).
-10. `assistant/domain/Assistant.scala` — `AssistantLLMResult`, `AssistantTurnResult`, `SendMessageResponse`; extend `MessageResponse` with `products`.
+9. **Done** — `assistant/services/AssistantPrompt.scala` — Call #2 prompt + parsing, mirroring `PromptValidator` structure; unit tested parsing logic via `AssistantPromptSpec`.
+10. **Done** — `assistant/domain/Assistant.scala` — `AssistantLLMResult`, `AssistantTurnResult`, `SendMessageResponse`; extended `MessageResponse` with `products`.
 11. `assistant/services/AssistantService.scala` — orchestration per §4's two-`Try` structure.
 12. `assistant/http/MessageRoutes.scala` — wire `AssistantService` in after `commitUserTurn`; build `SendMessageResponse`; retire `ValidationPassResponse` from the success path (keep the type if anything else still references it, otherwise delete it).
 13. `assistant/Main.scala` — construct `SupabaseProductProvider(rest)` and `AssistantService(llmClient, productProvider, conversationStates, messages)`; pass into `MessageRoutes`.
