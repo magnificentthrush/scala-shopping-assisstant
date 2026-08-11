@@ -356,29 +356,7 @@ Frontend: remove the item from the sidebar list; if it was the open chat, start 
 }
 ```
 
-#### Temporary `200` — Call #1 validation pass only (current backend)
-
-Until Call #2 (assistant + products) is wired, a message that **passes** the regex pre-filter and Call #1 returns this stub. It proves validation + persistence end-to-end; it is **not** a chat reply. See [`call1Plan.md`](call1Plan.md) and [`conversationPlan.md`](conversationPlan.md). Frontend should keep mocking chat until the full assistant body below ships.
-
-```json
-{
-  "safe": true,
-  "sessionId": "uuid-session",
-  "conversationId": "uuid-conversation",
-  "message": "Under $120 and waterproof",
-  "userMessage": {
-    "id": "uuid-user-msg",
-    "role": "user",
-    "content": "Under $120 and waterproof",
-    "sequenceNumber": 1,
-    "createdAt": "2026-08-11T10:16:00Z"
-  }
-}
-```
-
-`sessionId` is now looked up in the DB on every accepted message: a missing `sessionId` returns `404 SESSION_NOT_FOUND`, and a `sessionId` owned by a different user returns `403 FORBIDDEN`. The first accepted message on a fresh session lazy-creates the `conversations` row, so `conversationId` is real here — it is `null` only in the `POST /api/conversations` start response, before any message has been sent.
-
-#### Target `200` — normal assistant reply (Call #2 — not implemented yet)
+#### Response `200` — full assistant response
 
 ```json
 {
@@ -419,6 +397,8 @@ Until Call #2 (assistant + products) is wired, a message that **passes** the reg
   }
 }
 ```
+
+`sessionId` is looked up in the DB on every accepted message: a missing `sessionId` returns `404 SESSION_NOT_FOUND`, and a `sessionId` owned by a different user returns `403 FORBIDDEN`. The first accepted message on a fresh session lazy-creates the `conversations` row, so `conversationId` is real here — it is `null` only in the `POST /api/conversations` start response, before any message has been sent.
 
 `mode` values the UI should handle (target contract):
 

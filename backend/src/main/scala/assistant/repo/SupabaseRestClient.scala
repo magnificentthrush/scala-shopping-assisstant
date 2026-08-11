@@ -88,6 +88,20 @@ class SupabaseRestClient(config: AppConfig) {
     bodyOrThrow(response, s"DELETE $table")
   }
 
+  /** `POST rpc/{name}` with a JSON object body — invokes a Postgres function
+    * via PostgREST RPC.
+    */
+  def rpc(name: String, jsonBody: String): String = {
+    val uri = uri"$baseUrl/rpc/$name"
+    val response = basicRequest
+      .headers(authHeaders)
+      .post(uri)
+      .body(jsonBody)
+      .contentType("application/json")
+      .send(backend)
+    bodyOrThrow(response, s"RPC $name")
+  }
+
   private def bodyOrThrow(response: Response[Either[String, String]], context: String): String =
     response.body match {
       case Right(body) => body
