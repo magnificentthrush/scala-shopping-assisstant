@@ -28,7 +28,8 @@ import assistant.services.{
   */
 object Main extends cask.Main {
   override def host: String = "0.0.0.0"
-  override def port: Int = 8080
+  override def port: Int =
+    sys.env.get("PORT").flatMap(p => scala.util.Try(p.toInt).toOption).getOrElse(8080)
 
   private val config = AppConfig.fromEnv()
   // One PostgREST client shared across all repos — avoids redundant HTTP
