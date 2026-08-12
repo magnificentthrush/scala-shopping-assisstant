@@ -230,7 +230,7 @@ input:focus-visible {
   background: transparent;
   padding: 0 10px;
   color: var(--sp-text);
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -741,6 +741,13 @@ input:focus-visible {
   background: var(--sp-surface);
   padding: 8px 9px;
   box-shadow: var(--sp-shadow-soft);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.composer__box:focus-within {
+  border-color: var(--sp-text-faint);
+  box-shadow: var(--sp-shadow-soft),
+    0 0 0 3px color-mix(in srgb, var(--sp-text) 8%, transparent);
 }
 
 .composer__input {
@@ -751,6 +758,10 @@ input:focus-visible {
   background: transparent;
   padding: 0 6px;
   color: var(--sp-text);
+  outline: none;
+}
+
+.composer__input:focus-visible {
   outline: none;
 }
 
@@ -1402,7 +1413,7 @@ input:focus-visible {
   }
 
   .app-title-button {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   .chat__scroller {

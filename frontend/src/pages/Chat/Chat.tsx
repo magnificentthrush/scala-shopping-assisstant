@@ -82,7 +82,7 @@ export default function Chat() {
             </button>
             <div className="app-title-button" aria-label="Current assistant">
               ShopPilot
-              <ChevronDown size={15} strokeWidth={1.8} aria-hidden="true" />
+              <ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" />
             </div>
           </div>
           <ProfileAvatar onOpenSettings={() => setSettingsOpen(true)} />
