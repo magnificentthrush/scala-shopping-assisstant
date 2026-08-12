@@ -5,7 +5,7 @@ import ChatWidget from "../../components/ChatWidget/ChatWidget";
 import ProfileAvatar from "../../components/Navbar/Navbar";
 import Settings from "../../components/Settings/Settings";
 import { startConversation } from "../../api/chat";
-import { listConversations, resumeConversation } from "../../api/conversations";
+import { resumeConversation } from "../../api/conversations";
 
 export default function Chat() {
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -23,12 +23,7 @@ export default function Chat() {
   }, []);
 
   async function initChat() {
-    const existing = await listConversations();
-    if (existing.length > 0) {
-      await handleSelectConversation(existing[0].id);
-    } else {
-      await handleNewChat();
-    }
+    await handleNewChat();
   }
 
   async function handleNewChat() {
