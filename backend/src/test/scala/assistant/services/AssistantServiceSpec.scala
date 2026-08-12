@@ -153,7 +153,10 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     val turn = result.toOption.get
     turn.mode shouldBe "recommend"
     turn.reply should startWith("Here are boots under $100.")
-    turn.reply should include("under ₹100")
+    // CurrencyGuard deterministically overrides the LLM's raw budget: $100 is
+    // within the footwear ceiling, so it's converted to INR at the fixed rate
+    // rather than trusted as-is.
+    turn.reply should include("under ₹8,300")
     turn.products.length shouldBe 1
     turn.products.head.id shouldBe "p1"
     provider.searchCalled shouldBe true

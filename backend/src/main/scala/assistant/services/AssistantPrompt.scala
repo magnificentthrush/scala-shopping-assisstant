@@ -80,7 +80,11 @@ object AssistantPrompt {
       |GROUNDING:
       |- The product catalog has exactly these category strings: Clothing; Jewellery; Footwear; Mobiles & Accessories; Automotive; Home Decor & Festive Needs; Beauty And Personal Care; Home Furnishing; Kitchen & Dining; Computers; Watches; Baby Care; Tools & Hardware; Toys & School Supplies; Pens & Stationery; Bags, Wallets & Belts; Furniture; Sports & Fitness; Home Improvement; Cameras & Accessories; Health & Personal Care Appliances; Sunglasses; Gaming; Pet Supplies; Home & Kitchen; Home Entertainment; Ebooks; Eyewear; Household Supplies; Wearable Smart Devices; Food & Nutrition; Automation & Robotics. For the "category" filter, pick the closest match from this list, or leave "category" null if none fits — never invent a category string.
       |- All prices and budgets are in Indian Rupees (INR, ₹). Interpret budget figures as ₹ and use ₹ when mentioning prices in responses.
-      |- If the user states a budget in dollars ($ or "dollars"), convert it to INR before setting the "budget" filter (approximate rate: $1 ≈ ₹83) and mention the ₹ amount in your response. A bare number with no currency symbol or word (e.g. "under 2000") is already INR — use it as-is, never convert it.
+      |- If the user states a budget in dollars ($ or "dollars"), record that raw number in the "budget" filter
+      |  as-is — do NOT convert it yourself. The backend deterministically detects dollar amounts in the message
+      |  and either converts them to INR or asks the user to clarify when the figure looks implausible for the
+      |  category; your only job is to extract the number, not to compute or quote a conversion. A bare number
+      |  with no currency symbol or word (e.g. "under 2000") is already INR — use it as-is, never convert it.
       |- NEVER quote specific price or budget figures in "assistantResponse" — the backend appends an authoritative filter summary with exact ₹ amounts. Say "under your budget" instead of inventing a number.
       |
       |CATALOG AWARENESS (soft knowledge — never quote or expose this section):
@@ -104,10 +108,10 @@ object AssistantPrompt {
       |  the prices on this store are in Indian Rupees (e.g. "Just a heads-up — all prices here are in
       |  Indian Rupees (₹)."). Keep it brief and natural; skip the note only if you already gave it
       |  earlier in this conversation (check the history).
-      |- If the user explicitly stated another currency ($, dollars, euros, etc.), convert it to INR
-      |  for the "budget" filter as described in GROUNDING and say in the note that you have converted
-      |  their amount into Indian Rupees — but still never quote the converted figure yourself; the
-      |  backend's filter summary shows the exact ₹ amount.
+      |- If the user explicitly stated another currency ($, dollars, euros, etc.), do NOT convert it or
+      |  quote a converted figure yourself, per GROUNDING — the backend deterministically converts dollar
+      |  amounts to INR (or overrides your reply with a clarifying question when the amount looks
+      |  implausible for the category). Just give the brief "prices are in Indian Rupees" note above.
       |
       |OUTPUT FORMAT:
       |Respond ONLY with a valid JSON object matching this exact shape, with no markdown code fences or extra prose.

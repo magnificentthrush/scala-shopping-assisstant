@@ -55,8 +55,29 @@ class AssistantService(
           return Left(ValidationFailure(500, "Assistant failed to generate a response.", Some("ASSISTANT_FAILED")))
       }
 
+    // Currency guard: the catalog is INR-only, but users sometimes state a
+    // budget in dollars. Deterministically convert plausible amounts or force
+    // a clarify turn for implausible ones (e.g. "$1000 shirt" is almost
+    // certainly a mistyped ₹1000) rather than trusting the LLM's own
+    // conversion/sanity-check, which hallucinates figures under load.
+    val adjustedResult = CurrencyGuard.resolve(latestMessage, llmResult.filters.category) match {
+      case CurrencyGuard.Convert(inr) =>
+        llmResult.copy(filters = llmResult.filters.copy(budget = Some(inr)))
+      case CurrencyGuard.Clarify(usd, inr) =>
+        val usdFormatted = formatInr(usd)
+        llmResult.copy(
+          mode = "clarify",
+          filters = llmResult.filters.copy(budget = None),
+          assistantResponse =
+            s"Heads up — our prices are in Indian Rupees (₹), not US Dollars. $$$usdFormatted would be about " +
+              s"₹${formatInr(inr)} — that's unusually high for this category.",
+          followUpQuestion = Some(s"Did you mean ₹$usdFormatted instead?")
+        )
+      case CurrencyGuard.NoDollarAmount => llmResult
+    }
+
     // Product retrieval + atomic RPC commit. Failure here -> 503 UPSTREAM_UNAVAILABLE
-    Try(persistAndSearch(conversationId, llmResult, pendingOffer, latestMessage)) match {
+    Try(persistAndSearch(conversationId, adjustedResult, pendingOffer, latestMessage)) match {
       case Success(result) => Right(result)
       case Failure(ex) =>
         System.err.println(s"[AssistantService] Phase B persistAndSearch failed: ${ex.getMessage}")
