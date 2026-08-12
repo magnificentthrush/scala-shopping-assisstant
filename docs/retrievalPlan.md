@@ -210,6 +210,7 @@ sequenceDiagram
 - **`pgvector` semantic search** — stretch goal per `project-plan.md`; solves vocabulary mismatch more fundamentally than prompt grounding, at real infra cost.
 - **Retrieval logging into `llm.jsonl`-style records** — query text, rung used, candidate count, top-5 ids. Currently only `println`.
 - **`GET /api/products`** — debug route over the same provider; useful for admin screens.
+- **Deterministic relevance gate superseded** — the `isExactMatch` / closest-match honesty logic in `AssistantService` was replaced by the experimental LLM relevance re-check (Call #3 + pending-offer flow); see [`ARCHITECTURE.md`](ARCHITECTURE.md) §5 "Call #3: LLM relevance re-check and the pending offer".
 
 ---
 

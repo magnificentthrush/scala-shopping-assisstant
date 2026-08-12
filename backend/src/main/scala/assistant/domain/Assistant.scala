@@ -8,7 +8,8 @@ case class AssistantLLMResult(
     mode: String,
     filters: ExtractedFilters,
     assistantResponse: String,
-    followUpQuestion: Option[String]
+    followUpQuestion: Option[String],
+    pendingAction: Option[String]
 )
 
 /** AssistantService.respond's internal success return value — mirrors CommittedTurn. */

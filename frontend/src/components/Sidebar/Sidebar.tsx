@@ -119,7 +119,7 @@ export default function Sidebar({
     <aside className={`sidebar ${isOpen ? "sidebar--open" : ""}`} aria-label="Conversation sidebar">
       <div className="sidebar__header">
         <div className="sidebar__brand">
-          <BrandLogo compact />
+          <BrandLogo />
         </div>
         <button type="button" className="icon-button sidebar__close" onClick={onClose} aria-label="Close sidebar">
           <PanelLeftClose size={19} strokeWidth={1.7} />

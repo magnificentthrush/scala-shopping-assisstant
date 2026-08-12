@@ -5,7 +5,7 @@ import ChatWidget from "../../components/ChatWidget/ChatWidget";
 import ProfileAvatar from "../../components/Navbar/Navbar";
 import Settings from "../../components/Settings/Settings";
 import { startConversation } from "../../api/chat";
-import { listConversations, resumeConversation } from "../../api/conversations";
+import { resumeConversation } from "../../api/conversations";
 
 export default function Chat() {
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -23,12 +23,7 @@ export default function Chat() {
   }, []);
 
   async function initChat() {
-    const existing = await listConversations();
-    if (existing.length > 0) {
-      await handleSelectConversation(existing[0].id);
-    } else {
-      await handleNewChat();
-    }
+    await handleNewChat();
   }
 
   async function handleNewChat() {
@@ -87,7 +82,7 @@ export default function Chat() {
             </button>
             <div className="app-title-button" aria-label="Current assistant">
               ShopPilot
-              <ChevronDown size={15} strokeWidth={1.8} aria-hidden="true" />
+              <ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" />
             </div>
           </div>
           <ProfileAvatar onOpenSettings={() => setSettingsOpen(true)} />

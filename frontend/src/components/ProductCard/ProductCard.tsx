@@ -1,8 +1,25 @@
+import { useState } from "react";
 import { ExternalLink, Star } from "lucide-react";
 import type { Product } from "../../types";
 
 interface ProductCardProps {
   product: Product;
+}
+
+const PLACEHOLDER_IMAGE = "https://placehold.co/460x340/f1f1f1/777?text=No+Image";
+
+// Flipkart's CDN serves any asset at an arbitrary size by inserting
+// "{width}/{height}" after /image/, and the rukminim1 edge serves the same
+// assets over plain HTTPS (img5a/img6a 403 without a Flipkart referer).
+// Cards render at 4:3, so request ~460x340 instead of the 1100x1100 original.
+function cdnImageVariants(url: string): string[] {
+  const httpsUrl = url.replace(/^http:\/\//, "https://");
+  const match = httpsUrl.match(/^https:\/\/img\d+a\.flixcart\.com\/image\/(.+)$/);
+  if (!match) return [httpsUrl];
+  const path = match[1];
+  const resized = `https://rukminim1.flixcart.com/image/460/340/${path}`;
+  const original = `https://rukminim1.flixcart.com/image/${path}`;
+  return resized === original ? [original] : [resized, original];
 }
 
 function formatInr(amount: number): string {
@@ -15,15 +32,23 @@ function formatInr(amount: number): string {
 
 export default function ProductCard({ product }: ProductCardProps) {
   const hasDiscount = product.originalPrice && product.originalPrice > product.price;
+  const variants = product.imageUrl
+    ? [...cdnImageVariants(product.imageUrl), PLACEHOLDER_IMAGE]
+    : [PLACEHOLDER_IMAGE];
+  const [variantIndex, setVariantIndex] = useState(0);
 
   return (
     <article className="product-card">
       <div className="product-card__image-wrap">
         <img
-          src={product.imageUrl || "https://placehold.co/460x340/f1f1f1/777?text=No+Image"}
+          src={variants[variantIndex]}
           alt={product.name}
           className="product-card__image"
           loading="lazy"
+          decoding="async"
+          width="460"
+          height="340"
+          onError={() => setVariantIndex((i) => Math.min(i + 1, variants.length - 1))}
         />
       </div>
       <div className="product-card__body">

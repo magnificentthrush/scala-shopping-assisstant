@@ -362,9 +362,21 @@ User message
   → Supabase: full-text search + SQL filters → up to 30, via fallback ladder
        (full term set → category + budget → websearch on the salient term)
   → Reranker → top 5
-  → LLM (optional): format/explain the response
+  → LLM Call #3 — relevance re-check (judge the top 5 against the user's query)
   → React
 ```
+
+### Call #3: LLM relevance re-check and the pending offer
+
+Retrieval is deterministic, but the catalog is small and the fallback ladder can return loosely-related products for specific queries. To catch that, the reranked top 5 go through a **third LLM call (`RelevanceCheck`)** before anything is shown: it compares the candidates against the user's query using title, category, brand, and attributes (no prices or URLs, to keep tokens low) and returns a verdict.
+
+- **`match`** — only the LLM-approved subset is shown (rerank order preserved; an empty or unresolvable approved set falls back to the full 5).
+- **`no_match`** — no products are shown (`products: []`). Instead the reply names the 2–3 closest candidates and offers to show them ("…I can show you those — want me to?"). The offer is persisted as a **pending offer** so the user can confirm on a later turn.
+- **Fail-open** — if the re-check errors or times out, it is treated as `match` on the full reranked list: a broken re-check must never block product display.
+
+The pending offer — the filters used, the suggestion text, and the candidate ids — rides inside the existing `conversation_state.filters` jsonb blob as an **envelope**: `{ "filters": {...}, "pending": {...} | null }`. The read path still accepts the legacy bare-`ExtractedFilters` blob, so no migration is needed; writes always envelope. When a pending offer exists, Call #2's prompt is told about it and emits a `pendingAction` field (`accept` / `reject` / `null`) alongside the filters. On `accept`, the backend re-runs the search with the stored filters deterministically — provider search + rerank, **skipping the re-check** (the user explicitly asked for those items) — and clears the offer. On `reject`, the offer is cleared and no search runs.
+
+This LLM judgment **replaces** the earlier deterministic honesty logic in `AssistantService` (`isExactMatch` / closest-match caveat messages), which was removed — the re-check is now the sole judge of whether results are worth showing. The `Reranker` keeps its gender hard-gate and scoring for candidate ordering; `AssistantService` simply no longer reads `isExactMatch`. Zero-result searches (`products: []` before the re-check, meaning there was nothing to judge) keep the existing honest "relax a filter" reply.
 
 The LLM's job is understanding language and writing language. It is never asked to produce SQL, and the backend never executes LLM-authored queries — retrieval stays deterministic, debuggable, and safe from injection through the query layer itself.
 
@@ -605,7 +617,7 @@ Step by step:
 6. **Call #1** (validation) runs against the new message + recent context. Fail-closed on `safe:false` or any parse/timeout error — reject, nothing persisted.
 7. Only now: the user's message is appended to `messages` (filters still updated after Call #2; no DB `safe` column).
 8. **Call #2** (assistant) extracts/updates filters and drafts a response, using history + current filters.
-9. Business logic calls `ProductProvider.search(filters)` → `SupabaseProductProvider` → Supabase full-text search + filters → up to 30 candidates, via a fallback ladder when the strict query returns zero (full term set → category + budget → `websearch`-mode FTS on the most salient term) → reranker → top 5.
+9. Business logic calls `ProductProvider.search(filters)` → `SupabaseProductProvider` → Supabase full-text search + filters → up to 30 candidates, via a fallback ladder when the strict query returns zero (full term set → category + budget → `websearch`-mode FTS on the most salient term) → reranker → top 5 → **Call #3 relevance re-check** (§5): on `match` only the approved subset is returned; on `no_match` products are held back, the reply offers the closest candidates, and a pending offer is persisted in the `conversation_state.filters` envelope.
 10. The assistant's turn is appended to `messages`; `conversation_state.filters` is updated (point-lookup table, current-only).
 11. Response JSON (reply, products, `sessionId`) returns to React through Cask/uPickle.
 

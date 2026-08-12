@@ -19,33 +19,78 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     gemmaApiKey = ""
   )
 
-  private class TestLLMClient(var jsonToReturn: String, var shouldThrow: Boolean = false) extends LLMClient {
-    var generateCalled: Boolean = false
+  /** Routes fake LLM responses by inspecting the prompt: Call #3 (RelevanceCheck)
+    * prompts carry the numbered candidate list / verdict instructions, while Call #2
+    * (AssistantPrompt) prompts carry the ShopPilot system prompt and conversation state.
+    * Call counts let tests prove Call #3 did or did not run.
+    */
+  private class TestLLMClient(
+      call2Json: String,
+      call2ShouldThrow: Boolean = false,
+      call3Json: String = """{"verdict": "match", "matchedIds": [], "suggestion": null}""",
+      call3ShouldThrow: Boolean = false
+  ) extends LLMClient {
+    var call2Count: Int = 0
+    var call3Count: Int = 0
     override def generate(prompt: String): LLMResponse = {
-      generateCalled = true
-      if (shouldThrow) throw new RuntimeException("LLM API Error")
-      LLMResponse(jsonToReturn, "test-model")
+      if (prompt.contains("relevance judge") || prompt.contains("Candidate products:")) {
+        call3Count += 1
+        if (call3ShouldThrow) throw new RuntimeException("Relevance check exploded")
+        LLMResponse(call3Json, "test-model")
+      } else {
+        call2Count += 1
+        if (call2ShouldThrow) throw new RuntimeException("LLM API Error")
+        LLMResponse(call2Json, "test-model")
+      }
     }
   }
 
   private class TestProductProvider(var productsToReturn: Seq[Product], var shouldThrow: Boolean = false)
       extends ProductProvider {
     var searchCalled: Boolean = false
+    var lastSearchFilters: Option[ExtractedFilters] = None
     override def search(filters: ExtractedFilters, limit: Int): Seq[Product] = {
       searchCalled = true
+      lastSearchFilters = Some(filters)
       if (shouldThrow) throw new RuntimeException("DB Search Error")
       productsToReturn
     }
   }
 
-  private class TestRestClient(var rpcShouldThrow: Boolean = false) extends SupabaseRestClient(dummyConfig) {
+  /** Captures the state envelope handed to MessageRepo.insertAssistantMessage so
+    * tests can assert the {filters, pending} shape without a live DB.
+    */
+  private class FakeMessageRepo(client: SupabaseRestClient) extends MessageRepo(client) {
+    var lastEnvelope: Option[ujson.Value] = None
+    var lastProducts: Option[Seq[Product]] = None
+    override def insertAssistantMessage(
+        conversationId: String,
+        content: String,
+        filters: ujson.Value,
+        products: Seq[Product]
+    ): MessageRow = {
+      lastEnvelope = Some(filters)
+      lastProducts = Some(products)
+      MessageRow(
+        id = "m-asst-1",
+        conversationId = conversationId,
+        sequenceNumber = 2,
+        role = "assistant",
+        content = content,
+        createdAt = "2026-08-11T10:00:05Z"
+      )
+    }
+  }
+
+  private class TestRestClient(var rpcShouldThrow: Boolean = false, stateFiltersJson: String = "{}")
+      extends SupabaseRestClient(dummyConfig) {
     // Records every PATCH on `conversations` as (params, body) so title tests
     // can assert the auto-title call without a live DB.
     val conversationPatches = scala.collection.mutable.ListBuffer[(Map[String, String], String)]()
 
     override def get(table: String, params: Map[String, String]): String = {
       if (table == "conversation_state") {
-        """[{"conversation_id":"c1","filters":{},"updated_at":"2026-08-11T10:00:00Z"}]"""
+        s"""[{"conversation_id":"c1","filters":$stateFiltersJson,"updated_at":"2026-08-11T10:00:00Z"}]"""
       } else if (table == "messages") {
         """[]"""
       } else {
@@ -108,7 +153,10 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     val turn = result.toOption.get
     turn.mode shouldBe "recommend"
     turn.reply should startWith("Here are boots under $100.")
-    turn.reply should include("under ₹100")
+    // CurrencyGuard deterministically overrides the LLM's raw budget: $100 is
+    // within the footwear ceiling, so it's converted to INR at the fixed rate
+    // rather than trusted as-is.
+    turn.reply should include("under ₹8,300")
     turn.products.length shouldBe 1
     turn.products.head.id shouldBe "p1"
     provider.searchCalled shouldBe true
@@ -218,7 +266,7 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
   }
 
   test("respond returns ASSISTANT_FAILED (500) when Call #2 LLM fails") {
-    val llmClient = new TestLLMClient("", shouldThrow = true)
+    val llmClient = new TestLLMClient("", call2ShouldThrow = true)
     val provider = new TestProductProvider(Seq.empty)
     val client = new TestRestClient()
     val stateRepo = new ConversationStateRepo(client)
@@ -495,5 +543,202 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     val result = service.respond("c1", "hiking shoes")
     result.isRight shouldBe true
     result.toOption.get.products.length shouldBe 1
+  }
+
+  // --- Call #3 relevance re-check + pending-offer flow tests ---
+
+  // All three products clear the reranker's relevance gate for
+  // filters {keywords: ["hiking"], attributes: {gender: "men"}} and tie on
+  // score, so the price-ascending tie-break fixes the rerank order as
+  // pB (500) -> pC (700) -> pA (900).
+  private val hikingProducts = Seq(
+    makeProduct("pA", "Men Hiking Boot Alpha", "Footwear", 900.0),
+    makeProduct("pB", "Men Hiking Boot Beta", "Footwear", 500.0),
+    makeProduct("pC", "Men Hiking Boot Gamma", "Footwear", 700.0)
+  )
+
+  private val hikingCall2Json =
+    """{
+      |  "mode": "recommend",
+      |  "filters": { "category": "Footwear", "budget": null, "keywords": ["hiking"], "attributes": { "gender": "men" } },
+      |  "assistantResponse": "Here are hiking boots for men.",
+      |  "followUpQuestion": null,
+      |  "pendingAction": null
+      |}""".stripMargin
+
+  /** Envelope-shaped conversation state carrying a pending no-match offer.
+    * The pending filters deliberately differ from anything Call #2 returns so
+    * the accept test can prove the deterministic re-search used the stored ones.
+    */
+  private val pendingStateBlob =
+    """{
+      |  "filters": { "category": "Footwear", "budget": null, "keywords": ["hiking"], "attributes": { "gender": "men" } },
+      |  "pending": {
+      |    "filters": { "category": "Footwear", "budget": null, "keywords": ["trail"], "attributes": { "gender": "men" } },
+      |    "suggestion": "trail running shoes",
+      |    "candidateIds": ["pB", "pC", "pA"]
+      |  }
+      |}""".stripMargin
+
+  test("re-check match verdict returns only the matchedIds subset, in rerank order") {
+    val llmClient = new TestLLMClient(
+      call2Json = hikingCall2Json,
+      call3Json = """{"verdict": "match", "matchedIds": ["pA", "pB"], "suggestion": null}"""
+    )
+    val provider = new TestProductProvider(hikingProducts)
+    val client = new TestRestClient()
+    val msgRepo = new FakeMessageRepo(client)
+    val service = new AssistantService(
+      llmClient, provider, new ConversationStateRepo(client), msgRepo, new ConversationRepo(client)
+    )
+
+    val result = service.respond("c1", "hiking boots for men")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    // matchedIds were given in reverse of the rerank order (pB before pA) to
+    // prove the returned order comes from the reranker, not from matchedIds.
+    turn.products.map(_.id) shouldBe Seq("pB", "pA")
+    llmClient.call2Count shouldBe 1
+    llmClient.call3Count shouldBe 1
+    val envelope = msgRepo.lastEnvelope.get
+    envelope("pending").isNull shouldBe true
+  }
+
+  test("re-check match with empty or unresolvable matchedIds falls back to the full reranked list") {
+    for (call3 <- Seq(
+           """{"verdict": "match", "matchedIds": [], "suggestion": null}""",
+           """{"verdict": "match", "matchedIds": ["does-not-exist"], "suggestion": null}"""
+         )) {
+      val llmClient = new TestLLMClient(call2Json = hikingCall2Json, call3Json = call3)
+      val provider = new TestProductProvider(hikingProducts)
+      val client = new TestRestClient()
+      val service = new AssistantService(
+        llmClient, provider, new ConversationStateRepo(client), new FakeMessageRepo(client), new ConversationRepo(client)
+      )
+
+      val result = service.respond("c1", "hiking boots for men")
+
+      result.isRight shouldBe true
+      result.toOption.get.products.map(_.id) shouldBe Seq("pB", "pC", "pA")
+    }
+  }
+
+  test("re-check no_match holds products back and persists a PendingOffer in the state envelope") {
+    val llmClient = new TestLLMClient(
+      call2Json = hikingCall2Json,
+      call3Json = """{"verdict": "no_match", "matchedIds": [], "suggestion": "trail running shoes"}"""
+    )
+    val provider = new TestProductProvider(hikingProducts)
+    val client = new TestRestClient()
+    val msgRepo = new FakeMessageRepo(client)
+    val service = new AssistantService(
+      llmClient, provider, new ConversationStateRepo(client), msgRepo, new ConversationRepo(client)
+    )
+
+    val result = service.respond("c1", "waterproof hiking boots for men")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.products shouldBe Seq.empty
+    turn.reply should include("don't have that exact product")
+    turn.reply should include("trail running shoes")
+    turn.reply should not include "(Filters:"
+
+    val envelope = msgRepo.lastEnvelope.get
+    envelope.obj.keySet shouldBe Set("filters", "pending")
+    envelope("filters")("category").str shouldBe "Footwear"
+    val pending = envelope("pending")
+    pending("suggestion").str shouldBe "trail running shoes"
+    pending("candidateIds").arr.map(_.str).toSeq shouldBe Seq("pB", "pC", "pA")
+    pending("filters")("category").str shouldBe "Footwear"
+    pending("filters")("keywords").arr.map(_.str).toSeq shouldBe Seq("hiking")
+  }
+
+  test("accept of a pending offer re-searches deterministically and never re-runs the re-check") {
+    val call2AcceptJson =
+      """{
+        |  "mode": "recommend",
+        |  "filters": { "category": "Footwear", "budget": null, "keywords": ["hiking"], "attributes": { "gender": "men" } },
+        |  "assistantResponse": "Sure, showing those now.",
+        |  "followUpQuestion": null,
+        |  "pendingAction": "accept"
+        |}""".stripMargin
+
+    val trailProducts = Seq(
+      makeProduct("tA", "Men Trail Shoe Alpha", "Footwear", 900.0),
+      makeProduct("tB", "Men Trail Shoe Beta", "Footwear", 500.0)
+    )
+    val llmClient = new TestLLMClient(call2Json = call2AcceptJson)
+    val provider = new TestProductProvider(trailProducts)
+    val client = new TestRestClient(stateFiltersJson = pendingStateBlob)
+    val msgRepo = new FakeMessageRepo(client)
+    val service = new AssistantService(
+      llmClient, provider, new ConversationStateRepo(client), msgRepo, new ConversationRepo(client)
+    )
+
+    val result = service.respond("c1", "yes, show me those")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.reply shouldBe "Here are those items — hope one of them works for you."
+    turn.products.map(_.id) shouldBe Seq("tB", "tA")
+    // The re-search ran with the persisted pending filters, not the Call #2 ones.
+    provider.searchCalled shouldBe true
+    provider.lastSearchFilters.get.keywords shouldBe List("trail")
+    // Call #2 ran once; Call #3 was skipped on the confirmation turn.
+    llmClient.call2Count shouldBe 1
+    llmClient.call3Count shouldBe 0
+    // The pending offer was cleared from the state envelope.
+    msgRepo.lastEnvelope.get("pending").isNull shouldBe true
+  }
+
+  test("reject of a pending offer clears it without searching") {
+    val call2RejectJson =
+      """{
+        |  "mode": "recommend",
+        |  "filters": { "category": "Footwear", "budget": null, "keywords": ["hiking"], "attributes": { "gender": "men" } },
+        |  "assistantResponse": "No problem.",
+        |  "followUpQuestion": null,
+        |  "pendingAction": "reject"
+        |}""".stripMargin
+
+    val llmClient = new TestLLMClient(call2Json = call2RejectJson)
+    val provider = new TestProductProvider(hikingProducts)
+    val client = new TestRestClient(stateFiltersJson = pendingStateBlob)
+    val msgRepo = new FakeMessageRepo(client)
+    val service = new AssistantService(
+      llmClient, provider, new ConversationStateRepo(client), msgRepo, new ConversationRepo(client)
+    )
+
+    val result = service.respond("c1", "no, not interested")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.reply shouldBe "No problem — let me know what else you'd like to find."
+    turn.products shouldBe Seq.empty
+    provider.searchCalled shouldBe false
+    llmClient.call2Count shouldBe 1
+    llmClient.call3Count shouldBe 0
+    msgRepo.lastEnvelope.get("pending").isNull shouldBe true
+  }
+
+  test("a throwing relevance re-check fails open with the full reranked list") {
+    val llmClient = new TestLLMClient(call2Json = hikingCall2Json, call3ShouldThrow = true)
+    val provider = new TestProductProvider(hikingProducts)
+    val client = new TestRestClient()
+    val msgRepo = new FakeMessageRepo(client)
+    val service = new AssistantService(
+      llmClient, provider, new ConversationStateRepo(client), msgRepo, new ConversationRepo(client)
+    )
+
+    val result = service.respond("c1", "hiking boots for men")
+
+    result.isRight shouldBe true
+    val turn = result.toOption.get
+    turn.products.map(_.id) shouldBe Seq("pB", "pC", "pA")
+    turn.reply should include("Here are hiking boots for men.")
+    llmClient.call3Count shouldBe 1
+    msgRepo.lastEnvelope.get("pending").isNull shouldBe true
   }
 }

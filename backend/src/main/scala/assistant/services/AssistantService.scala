@@ -7,12 +7,24 @@ import upickle.default._
 
 import scala.util.{Failure, Success, Try}
 
-/** Orchestrates LLM Call #2 (docs/call2Plan.md §4).
+/** A no-match offer awaiting the user's confirmation, persisted inside the
+  * `conversation_state.filters` envelope. On "accept" the stored filters are
+  * re-searched deterministically; `candidateIds` records the rejected pool the
+  * suggestion was drawn from.
+  */
+case class PendingOffer(filters: ExtractedFilters, suggestion: String, candidateIds: Seq[String])
+
+object PendingOffer {
+  implicit val rw: ReadWriter[PendingOffer] = macroRW
+}
+
+/** Orchestrates LLM Call #2 (docs/call2Plan.md §4) and Call #3 (relevance re-check).
   * Turns a validated and persisted user turn into a full assistant response:
-  * - Loads current conversation state filters and recent history
+  * - Loads current conversation state (filters + pending offer envelope) and recent history
   * - Runs Call #2 via AssistantPrompt
-  * - Performs product search + reranking when mode == "recommend" and filters are present
-  * - Commits the assistant message + merged filters atomically via commit_assistant_turn RPC
+  * - Short-circuits accept/reject confirmations of a pending offer
+  * - Performs product search + reranking + Call #3 re-check when mode == "recommend" and filters are present
+  * - Commits the assistant message + state envelope atomically via commit_assistant_turn RPC
   */
 class AssistantService(
     llmClient: LLMClient,
@@ -23,22 +35,49 @@ class AssistantService(
 ) {
 
   def respond(conversationId: String, latestMessage: String): Either[ValidationFailure, AssistantTurnResult] = {
-    val currentFilters = conversationStates.find(conversationId).flatMap { state =>
-      Try(read[ExtractedFilters](state.filters.render())).toOption
+    val (currentFilters, pendingOffer) = conversationStates.find(conversationId) match {
+      case Some(state) => readStateEnvelope(state.filters)
+      case None        => (None, None)
     }
     val recentMessages = messages.recent(conversationId, 8)
 
+    val pendingContext = pendingOffer.map(p =>
+      PendingOfferContext(suggestion = p.suggestion, filtersSummary = filterSummary(p.filters))
+    )
+
     // Call #1 is LLM safety; Call #2 is assistant prompt. Failure here -> 500 ASSISTANT_FAILED
-    val llmResult = Try(AssistantPrompt.respond(latestMessage, currentFilters, recentMessages, llmClient)) match {
-      case Success(res) => res
-      case Failure(ex) =>
-        System.err.println(s"[AssistantService] Call #2 LLM failed: ${ex.getMessage}")
-        ex.printStackTrace()
-        return Left(ValidationFailure(500, "Assistant failed to generate a response.", Some("ASSISTANT_FAILED")))
+    val llmResult =
+      Try(AssistantPrompt.respond(latestMessage, currentFilters, recentMessages, llmClient, pendingContext)) match {
+        case Success(res) => res
+        case Failure(ex) =>
+          System.err.println(s"[AssistantService] Call #2 LLM failed: ${ex.getMessage}")
+          ex.printStackTrace()
+          return Left(ValidationFailure(500, "Assistant failed to generate a response.", Some("ASSISTANT_FAILED")))
+      }
+
+    // Currency guard: the catalog is INR-only, but users sometimes state a
+    // budget in dollars. Deterministically convert plausible amounts or force
+    // a clarify turn for implausible ones (e.g. "$1000 shirt" is almost
+    // certainly a mistyped ₹1000) rather than trusting the LLM's own
+    // conversion/sanity-check, which hallucinates figures under load.
+    val adjustedResult = CurrencyGuard.resolve(latestMessage, llmResult.filters.category) match {
+      case CurrencyGuard.Convert(inr) =>
+        llmResult.copy(filters = llmResult.filters.copy(budget = Some(inr)))
+      case CurrencyGuard.Clarify(usd, inr) =>
+        val usdFormatted = formatInr(usd)
+        llmResult.copy(
+          mode = "clarify",
+          filters = llmResult.filters.copy(budget = None),
+          assistantResponse =
+            s"Heads up — our prices are in Indian Rupees (₹), not US Dollars. $$$usdFormatted would be about " +
+              s"₹${formatInr(inr)} — that's unusually high for this category.",
+          followUpQuestion = Some(s"Did you mean ₹$usdFormatted instead?")
+        )
+      case CurrencyGuard.NoDollarAmount => llmResult
     }
 
     // Product retrieval + atomic RPC commit. Failure here -> 503 UPSTREAM_UNAVAILABLE
-    Try(persistAndSearch(conversationId, llmResult)) match {
+    Try(persistAndSearch(conversationId, adjustedResult, pendingOffer, latestMessage)) match {
       case Success(result) => Right(result)
       case Failure(ex) =>
         System.err.println(s"[AssistantService] Phase B persistAndSearch failed: ${ex.getMessage}")
@@ -47,8 +86,47 @@ class AssistantService(
     }
   }
 
-  private def persistAndSearch(conversationId: String, llmResult: AssistantLLMResult): AssistantTurnResult = {
+  private def persistAndSearch(
+      conversationId: String,
+      llmResult: AssistantLLMResult,
+      pendingOffer: Option[PendingOffer],
+      latestMessage: String
+  ): AssistantTurnResult = {
     val filters = llmResult.filters
+
+    // Confirmation short-circuit: the user is answering a pending no-match
+    // offer, so re-run the stored search deterministically (no Call #3 — the
+    // user explicitly asked for these items) and clear the offer. Accept/
+    // reject without a pending offer is ignored and falls through to the
+    // normal path.
+    llmResult.pendingAction match {
+      case Some("accept") if pendingOffer.isDefined =>
+        val pending = pendingOffer.get
+        val candidates = productProvider.search(pending.filters, limit = 30)
+        val products = Reranker.rerank(candidates, pending.filters, limit = 5).products
+        return commitTurn(
+          conversationId,
+          reply = "Here are those items — hope one of them works for you.",
+          followUpQuestion = None,
+          mode = llmResult.mode,
+          filters = filters,
+          pending = None,
+          products = products,
+          showFilterSummary = false
+        )
+      case Some("reject") if pendingOffer.isDefined =>
+        return commitTurn(
+          conversationId,
+          reply = "No problem — let me know what else you'd like to find.",
+          followUpQuestion = None,
+          mode = llmResult.mode,
+          filters = filters,
+          pending = None,
+          products = Seq.empty,
+          showFilterSummary = false
+        )
+      case _ => ()
+    }
 
     // Discovery-first gate (mirrors the READINESS RULE in AssistantPrompt's
     // system prompt): even if the LLM says "recommend", we only search when
@@ -62,60 +140,127 @@ class AssistantService(
     val shouldSearch = gatedResult.mode == "recommend" &&
       (filters.category.nonEmpty || filters.budget.nonEmpty || filters.keywords.nonEmpty || filters.attributes.nonEmpty)
 
-    val rerankResult = if (shouldSearch) {
-      val candidates = productProvider.search(filters, limit = 30)
-      Reranker.rerank(candidates, filters, limit = 5)
-    } else {
-      Reranker.RerankResult(Seq.empty[Product], isExactMatch = true)
+    val reranked =
+      if (shouldSearch) Reranker.rerank(productProvider.search(filters, limit = 30), filters, limit = 5).products
+      else Seq.empty[Product]
+
+    if (!shouldSearch) {
+      return commitTurn(
+        conversationId,
+        reply = gatedResult.assistantResponse,
+        followUpQuestion = gatedResult.followUpQuestion,
+        mode = gatedResult.mode,
+        filters = filters,
+        pending = None,
+        products = Seq.empty,
+        showFilterSummary = false
+      )
     }
-    val products = rerankResult.products
 
     // The LLM wrote its reply before search ran, so it can't know how the
     // catalog actually responded — "here are some great options" above zero
-    // product cards is dishonest, and so is presenting a merely-closest match
-    // (e.g. football shoes for a "running shoes" query) with full confidence.
-    // Override with a deterministic, honest message in either case; try the
-    // search first, but say so plainly when the catalog couldn't fully deliver.
-    val honestResult =
-      if (shouldSearch && products.isEmpty) {
-        gatedResult.copy(
-          assistantResponse =
-            "I couldn't find anything in our catalog matching those exact filters. " +
-              "Try broadening the category or raising the budget and I'll search again.",
-          followUpQuestion = Some("Would you like to relax the budget or browse a wider category?")
-        )
-      } else if (shouldSearch && !rerankResult.isExactMatch) {
-        gatedResult.copy(assistantResponse = closestMatchMessage(filters))
-      } else gatedResult
+    // product cards is dishonest. With no candidates there is nothing for the
+    // re-check to judge, so keep the deterministic zero-result message.
+    if (reranked.isEmpty) {
+      return commitTurn(
+        conversationId,
+        reply =
+          "I couldn't find anything in our catalog matching those exact filters. " +
+            "Try broadening the category or raising the budget and I'll search again.",
+        followUpQuestion = Some("Would you like to relax the budget or browse a wider category?"),
+        mode = gatedResult.mode,
+        filters = filters,
+        pending = None,
+        products = Seq.empty,
+        showFilterSummary = true
+      )
+    }
 
+    // Call #3 — LLM relevance re-check of the reranked candidates. Fails OPEN:
+    // a broken re-check (timeout/parse) must never block product display, so a
+    // throw is logged and treated as a full match.
+    Try(RelevanceCheck.check(latestMessage, Some(filters), reranked, llmClient)) match {
+      case Success(verdict) if verdict.verdict == "match" =>
+        val matchedIds = verdict.matchedIds.toSet
+        val matched = reranked.filter(p => matchedIds.contains(p.id))
+        commitTurn(
+          conversationId,
+          reply = gatedResult.assistantResponse,
+          followUpQuestion = gatedResult.followUpQuestion,
+          mode = gatedResult.mode,
+          filters = filters,
+          pending = None,
+          products = if (matched.nonEmpty) matched else reranked,
+          showFilterSummary = true
+        )
+      case Success(verdict) =>
+        val suggestion = verdict.suggestion
+          .getOrElse(filters.category.map(c => s"similar $c items").getOrElse("similar items"))
+        commitTurn(
+          conversationId,
+          reply =
+            s"We don't have that exact product in our catalogue, but if you're looking for " +
+              s"$suggestion, I can show you those — want me to check?",
+          followUpQuestion = None,
+          mode = gatedResult.mode,
+          filters = filters,
+          pending = Some(PendingOffer(filters, suggestion, reranked.map(_.id))),
+          products = Seq.empty,
+          showFilterSummary = false
+        )
+      case Failure(ex) =>
+        System.err.println(s"[AssistantService] Call #3 relevance re-check failed, failing open: ${ex.getMessage}")
+        commitTurn(
+          conversationId,
+          reply = gatedResult.assistantResponse,
+          followUpQuestion = gatedResult.followUpQuestion,
+          mode = gatedResult.mode,
+          filters = filters,
+          pending = None,
+          products = reranked,
+          showFilterSummary = true
+        )
+    }
+  }
+
+  /** Persists the assistant message + state envelope and builds the turn
+    * result — the shared tail of every persistAndSearch path.
+    */
+  private def commitTurn(
+      conversationId: String,
+      reply: String,
+      followUpQuestion: Option[String],
+      mode: String,
+      filters: ExtractedFilters,
+      pending: Option[PendingOffer],
+      products: Seq[Product],
+      showFilterSummary: Boolean
+  ): AssistantTurnResult = {
     // The UI renders a single message per turn — fold the separate
     // followUpQuestion into the same text instead of leaving it as an
     // unmerged field the frontend has to render as its own clickable block.
     // The prompt is instructed to never duplicate a question across both
     // fields, but this guard also protects against a misbehaving LLM.
-    val combinedText = honestResult.followUpQuestion match {
-      case Some(question) if !honestResult.assistantResponse.trim.endsWith("?") =>
-        s"${honestResult.assistantResponse.trim} $question"
-      case _ => honestResult.assistantResponse
+    val combinedText = followUpQuestion match {
+      case Some(question) if !reply.trim.endsWith("?") => s"${reply.trim} $question"
+      case _                                           => reply
     }
 
     // The resolved filters are appended as a deterministic summary — the LLM's
     // own prose hallucinates budget numbers (it wrote "₹12,000" for a 2000
     // budget), so per ARCHITECTURE.md §5 the authoritative summary is built
     // here, and the prompt is instructed never to quote figures itself.
-    val summaryParts =
-      filters.category.toSeq ++
-        filters.budget.map(b => s"under ₹${formatInr(b)}") ++
-        filters.keywords.headOption.map(k => s""""$k"""").toSeq
+    val parts = filterSummaryParts(filters)
     val finalReply =
-      if (shouldSearch && summaryParts.nonEmpty)
-        s"$combinedText (Filters: ${summaryParts.mkString(", ")})"
+      if (showFilterSummary && parts.nonEmpty) s"$combinedText (Filters: ${parts.mkString(", ")})"
       else combinedText
 
-    val filtersJsonStr = write(filters)
-    val filtersJsonVal = ujson.read(filtersJsonStr)
+    val envelope = ujson.Obj(
+      "filters" -> writeJs(filters),
+      "pending" -> pending.map(writeJs(_)).getOrElse(ujson.Null)
+    )
 
-    val msgRow = messages.insertAssistantMessage(conversationId, finalReply, filtersJsonVal)
+    val msgRow = messages.insertAssistantMessage(conversationId, finalReply, envelope, products)
 
     // Option B auto-title: once a conversation has been successfully answered,
     // derive a short sidebar label from the resolved filters and fill it in —
@@ -132,17 +277,38 @@ class AssistantService(
       content = msgRow.content,
       sequenceNumber = msgRow.sequenceNumber,
       createdAt = msgRow.createdAt,
-      products = Seq.empty
+      products = products
     )
 
     AssistantTurnResult(
-      mode = honestResult.mode,
+      mode = mode,
       reply = finalReply,
-      followUpQuestion = honestResult.followUpQuestion,
+      followUpQuestion = followUpQuestion,
       products = products,
       assistantMessage = assistantMsgResponse
     )
   }
+
+  /** Reads the `conversation_state.filters` blob as an envelope
+    * `{ "filters": ..., "pending": ... | null }`. Blobs written before the
+    * envelope existed are a legacy bare `ExtractedFilters` object (no
+    * "filters" key) and read with no pending offer. A corrupt blob degrades
+    * to (no filters, no pending) rather than failing the turn.
+    */
+  private def readStateEnvelope(blob: ujson.Value): (Option[ExtractedFilters], Option[PendingOffer]) =
+    Try {
+      blob match {
+        case ujson.Obj(map) if map.contains("filters") =>
+          val filters = Try(read[ExtractedFilters](map("filters").render())).toOption
+          val pending = map.get("pending") match {
+            case Some(ujson.Null) | None => None
+            case Some(p)                 => Try(read[PendingOffer](p.render())).toOption
+          }
+          (filters, pending)
+        case legacy =>
+          (Try(read[ExtractedFilters](legacy.render())).toOption, None)
+      }
+    }.getOrElse((None, None))
 
   private val GenderRelevantCategories = Set(
     "Clothing", "Footwear", "Watches", "Bags, Wallets & Belts",
@@ -219,27 +385,13 @@ class AssistantService(
       conversations.setTitleIfNull(conversationId, title)
     }
 
-  /** Builds the honest caveat shown when the reranker couldn't clear its
-    * keyword-relevance gate (`RerankResult.isExactMatch = false`) but still
-    * returned a best-effort set of products. Picks the most specific
-    * extracted term (longest keyword/attribute value, mirroring the
-    * provider's own "salient" term selection) so the caveat names what
-    * actually couldn't be matched rather than a generic filler word.
-    */
-  private def closestMatchMessage(filters: ExtractedFilters): String = {
-    val salient = (filters.keywords ++ filters.attributes.values)
-      .map(_.trim)
-      .filter(_.nonEmpty)
-      .sortBy(-_.length)
-      .headOption
-    val categoryPart = filters.category.map(c => s" $c").getOrElse("")
-    salient match {
-      case Some(term) =>
-        s"""I couldn't find an exact match for "$term" in our catalog, so here are the closest$categoryPart options I found instead."""
-      case None =>
-        s"I couldn't find an exact match for those filters in our catalog, so here are the closest$categoryPart options I found instead."
-    }
-  }
+  private def filterSummaryParts(filters: ExtractedFilters): Seq[String] =
+    filters.category.toSeq ++
+      filters.budget.map(b => s"under ₹${formatInr(b)}") ++
+      filters.keywords.headOption.map(k => s""""$k"""").toSeq
+
+  private def filterSummary(filters: ExtractedFilters): String =
+    filterSummaryParts(filters).mkString(", ")
 
   private def formatInr(amount: BigDecimal): String = {
     val fmt = java.text.NumberFormat.getNumberInstance(new java.util.Locale("en", "IN"))

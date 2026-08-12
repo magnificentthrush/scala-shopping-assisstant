@@ -154,6 +154,7 @@ CREATE TABLE messages (
   role             TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
   content          TEXT NOT NULL,
   filters_snapshot JSONB,
+  products         JSONB,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (conversation_id, sequence_number)
 );
@@ -164,6 +165,7 @@ CREATE TABLE messages (
 | `sequence_number` | Explicit per-conversation ordering. Turn order is never inferred from `created_at` alone. |
 | `role` | `"user"` or `"assistant"`. |
 | `filters_snapshot` | The filters believed to be true **after this turn** — an audit trail, not the live value (see `conversation_state` below). |
+| `products` | JSONB snapshot of the `Product[]` recommended on this assistant turn (null for user rows and legacy assistant rows). Persisted so product cards survive conversation reload — populated on resume responses. |
 
 `messages` is the durable turn-by-turn record. It intentionally duplicates filter information that also lives (in current form) in `conversation_state` — that duplication is the point: `conversation_state` only ever tells you *now*, while `messages.filters_snapshot` tells you what filters the system believed *at that point in time*. Rejected/unsafe user input is never written here (Call #1 `safe` lives only in the validation pipeline, not as a DB column) — see the [security pipeline](ARCHITECTURE.md#6-prompt-validation--security--two-stage-pipeline) for the exact ordering.
 
@@ -232,7 +234,9 @@ data/migrations/
 ├── 005_products_readonly_rls.sql
 ├── 006_drop_messages_safe.sql
 ├── 007_add_email_verification_to_users.sql
-└── 008_chat_sessions_conversation_id_nullable.sql
+├── 008_chat_sessions_conversation_id_nullable.sql
+├── 009_commit_assistant_turn_function.sql
+└── 010_add_products_to_messages.sql
 ```
 
 These files (and `data/scripts/apply_migrations.py`) are tracked in git — every developer needs them to see what's already applied to the shared database and to apply new ones themselves (see [`conversationPlan.md`](conversationPlan.md) for the migration/gitignore correction that made this true; they were previously, incorrectly, gitignored as "local-only").
