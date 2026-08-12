@@ -14,4 +14,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["sbt", "~run"]
+CMD ["sbt", "runMain assistant.Main"]
