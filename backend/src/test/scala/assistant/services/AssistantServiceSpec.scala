@@ -62,8 +62,15 @@ class AssistantServiceSpec extends AnyFunSuite with Matchers {
     */
   private class FakeMessageRepo(client: SupabaseRestClient) extends MessageRepo(client) {
     var lastEnvelope: Option[ujson.Value] = None
-    override def insertAssistantMessage(conversationId: String, content: String, filters: ujson.Value): MessageRow = {
+    var lastProducts: Option[Seq[Product]] = None
+    override def insertAssistantMessage(
+        conversationId: String,
+        content: String,
+        filters: ujson.Value,
+        products: Seq[Product]
+    ): MessageRow = {
       lastEnvelope = Some(filters)
+      lastProducts = Some(products)
       MessageRow(
         id = "m-asst-1",
         conversationId = conversationId,

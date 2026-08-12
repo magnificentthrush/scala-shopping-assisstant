@@ -183,7 +183,8 @@ class ConversationService(
       role = m.role,
       content = m.content,
       sequenceNumber = m.sequenceNumber,
-      createdAt = m.createdAt
+      createdAt = m.createdAt,
+      products = m.products.getOrElse(Seq.empty)
     )
 
   private def dbError: ValidationFailure =

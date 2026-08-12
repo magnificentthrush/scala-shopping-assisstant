@@ -239,7 +239,7 @@ class AssistantService(
       "pending" -> pending.map(writeJs(_)).getOrElse(ujson.Null)
     )
 
-    val msgRow = messages.insertAssistantMessage(conversationId, finalReply, envelope)
+    val msgRow = messages.insertAssistantMessage(conversationId, finalReply, envelope, products)
 
     // Option B auto-title: once a conversation has been successfully answered,
     // derive a short sidebar label from the resolved filters and fill it in —
@@ -256,7 +256,7 @@ class AssistantService(
       content = msgRow.content,
       sequenceNumber = msgRow.sequenceNumber,
       createdAt = msgRow.createdAt,
-      products = Seq.empty
+      products = products
     )
 
     AssistantTurnResult(

@@ -1,6 +1,7 @@
 package assistant.repo
 
-import assistant.domain.MessageRow
+import assistant.domain.{MessageRow, Product}
+import assistant.domain.BigDecimalCodec.bigDecimalRW
 import assistant.domain.NullableOption.nullableOptionRW
 import upickle.default._
 
@@ -76,13 +77,20 @@ class MessageRepo(client: SupabaseRestClient) {
   }
 
   /** Inserts the assistant's turn and updates conversation_state.filters atomically via
-    * the `commit_assistant_turn` Postgres function (migration 009).
+    * the `commit_assistant_turn` Postgres function (migration 010). `products` is the
+    * JSONB snapshot of recommended products so cards survive conversation reload.
     */
-  def insertAssistantMessage(conversationId: String, content: String, filters: ujson.Value): MessageRow = {
+  def insertAssistantMessage(
+      conversationId: String,
+      content: String,
+      filters: ujson.Value,
+      products: Seq[Product]
+  ): MessageRow = {
     val body = ujson.Obj(
       "p_conversation_id" -> conversationId,
       "p_content" -> content,
-      "p_filters" -> filters
+      "p_filters" -> filters,
+      "p_products" -> (if (products.nonEmpty) writeJs(products) else ujson.Null)
     ).render()
     val json = client.rpc("commit_assistant_turn", body)
     read[Seq[MessageRow]](json).headOption.getOrElse(

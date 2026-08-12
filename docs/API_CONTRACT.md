@@ -52,7 +52,9 @@ type Message = {
   content: string
   sequenceNumber: number
   createdAt: string // ISO-8601
-  products?: Product[] // present on some assistant turns that recommended items
+  products?: Product[] // present on assistant turns that recommended items; persisted
+                       // on the message row, so it is also populated after resume/reload
+                       // (legacy assistant messages from before persistence return [])
 }
 
 type ConversationSummary = {
