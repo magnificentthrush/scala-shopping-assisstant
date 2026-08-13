@@ -85,29 +85,4 @@ object GeminiLLMClient {
     * comfortably under that (15 RPM allows one every 4s).
     */
   val MinRequestIntervalMs = 5000L
-
-  private val DefaultPrompt = "What is the capital of France?"
-
-  // Reads GEMMA_API_KEY or GOOGLE_API_KEY for the manual smoke-test main.
-  private def apiKeyFromEnv(): String =
-    sys.env
-      .get("GEMMA_API_KEY")
-      .orElse(sys.env.get("GOOGLE_API_KEY"))
-      .getOrElse(sys.error("Set GEMMA_API_KEY or GOOGLE_API_KEY in the environment"))
-
-  /** Manual smoke test.
-    *
-    * Run from backend/:
-    *   sbt "runMain assistant.services.GeminiLLMClient"
-    *
-    * Requires GEMMA_API_KEY (or GOOGLE_API_KEY) in the environment.
-    */
-  def main(args: Array[String]): Unit = {
-    val prompt = args.headOption.getOrElse(DefaultPrompt)
-    val client = new GeminiLLMClient(apiKeyFromEnv())
-    val response = client.generate(prompt)
-
-    println(s"[llm] served by: ${response.modelUsed}")
-    println(response.text)
-  }
 }
