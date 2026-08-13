@@ -39,6 +39,7 @@ object EmailService {
   * can complete verification without an inbox (docs/authPlan.md §1).
   */
 class NoOpEmailService extends EmailService {
+  // Prints the link instead of sending — used when Resend isn't configured.
   def sendVerificationEmail(to: String, link: String): Unit =
     println(s"[email] NoOpEmailService — would send verification link to $to: $link")
 }
@@ -53,6 +54,7 @@ class ResendEmailService(config: AppConfig) extends EmailService {
   private val backend = HttpClientSyncBackend()
   private val endpoint = uri"https://api.resend.com/emails"
 
+  /** Sends the verification email via Resend; throws on a non-2xx response. */
   def sendVerificationEmail(to: String, link: String): Unit = {
     val body = Obj(
       "from" -> config.emailFrom,
@@ -78,6 +80,7 @@ class ResendEmailService(config: AppConfig) extends EmailService {
     }
   }
 
+  // HTML body of the verification email, including the clickable link.
   private def htmlBody(link: String): String =
     s"""<p>Welcome to ShopPilot.</p>
        |<p><a href="$link">Click here to verify your email</a>.</p>

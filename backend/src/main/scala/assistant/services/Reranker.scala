@@ -34,6 +34,7 @@ object Reranker {
 
     val requiredGender = Gender.requiredFrom(filters)
 
+    // Concatenated product fields the keyword/gender gates scan.
     def searchableText(product: Product): String =
       Seq(
         product.name,
@@ -61,6 +62,7 @@ object Reranker {
       case None => candidates
     }
 
+    // How many extracted filter terms appear in the product's searchable text.
     def keywordHitsOf(product: Product): Int =
       targetTerms.count(term => TextMatch.containsTerm(searchableText(product), term))
 
@@ -89,6 +91,7 @@ object Reranker {
       if (relevant.nonEmpty) (relevant, true)
       else (genderedPool, false) // Nothing cleared the gate — fall back to the (gender-filtered) pool as a best-effort answer.
 
+    // Combined keyword, price-vs-budget, and rating score used to order the pool.
     def scoreOf(product: Product): (Double, Double) = {
       val keywordHits = keywordHitsOf(product)
 

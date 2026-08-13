@@ -28,6 +28,7 @@ class AuthService(
   private val emailPattern = "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$".r
   private val VerificationTokenTtlHours = 24L
 
+  /** Creates the user, hashes the password, and sends (or logs) a verification email. */
   def register(req: RegisterRequest): Either[AuthFailure, RegisterResult] =
     for {
       _ <- validateRegister(req)
@@ -66,6 +67,7 @@ class AuthService(
       )
     }
 
+  /** Marks the user verified if the token is valid and unexpired; otherwise TOKEN_INVALID/EXPIRED. */
   def verifyEmail(rawToken: String): Either[AuthFailure, VerifyResult] = {
     val trimmed = Option(rawToken).map(_.trim).getOrElse("")
     if (trimmed.isEmpty) {
@@ -100,6 +102,7 @@ class AuthService(
     }
   }
 
+  /** Issues a JWT after checking credentials and that the email has been verified. */
   def login(req: LoginRequest): Either[AuthFailure, LoginResult] = {
     val invalid =
       AuthFailure(
@@ -158,6 +161,7 @@ class AuthService(
       password.exists(_.isDigit) &&
       password.exists(_.isUpper)
 
+  // Random URL-safe token plus its SHA-256 hash (only the hash is stored).
   private def newVerificationToken(): (String /* raw */, String /* sha256 hex */) = {
     val bytes = new Array[Byte](32)
     secureRandom.nextBytes(bytes) //nextBytes method that fills a byte array with random values.
@@ -165,16 +169,19 @@ class AuthService(
     (raw_token, sha256Hex(raw_token))
   }
 
+  // Hex-encoded SHA-256; used to store/lookup verification tokens without keeping the raw value.
   private def sha256Hex(value: String): String = {
     val digest =
       MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))
     digest.map("%02x".format(_)).mkString
   }
 
+  // Parses an ISO-8601 timestamp, or None if the string is malformed.
   private def parseInstant(value: String): Option[Instant] =
     try Some(Instant.parse(value))
     catch { case _: Exception => None }
 
+  // Shared 400 TOKEN_INVALID payload for missing, unknown, or unparseable tokens.
   private def tokenInvalid: AuthFailure =
     AuthFailure(
       status = 400,

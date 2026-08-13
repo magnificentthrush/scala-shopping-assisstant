@@ -64,11 +64,13 @@ object CurrencyGuard {
         else Clarify(usd, inr)
     }
 
+  // Parses the first $ / USD / "dollars" / "bucks" amount from the raw message.
   private def firstDollarAmount(message: String): Option[BigDecimal] =
     DollarPattern.findFirstMatchIn(message).flatMap { m =>
       Option(m.group(1)).orElse(Option(m.group(2))).map(s => BigDecimal(s.replace(",", "")))
     }
 
+  // Max plausible USD budget for this category; falls back to DefaultCeilingUsd.
   private def ceilingFor(category: Option[String]): BigDecimal =
     category
       .map(_.toLowerCase)

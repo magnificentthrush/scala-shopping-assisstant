@@ -124,6 +124,7 @@ class ConversationService(
       case Failure(_)      => Left(dbError)
     }
 
+  // Session ownership, lazy-create, persist the user row, and touch timestamps — may throw.
   private def commitUserTurnUnsafe(
       sessionId: String,
       userId: String,
@@ -168,6 +169,7 @@ class ConversationService(
         conversation.id
     }
 
+  // Maps a conversation row onto the sidebar summary DTO.
   private def toSummary(c: Conversation): ConversationSummary =
     ConversationSummary(
       id = c.id,
@@ -177,6 +179,7 @@ class ConversationService(
       lastMessageAt = c.lastMessageAt
     )
 
+  // Maps a message row onto the API DTO, including any stored product cards.
   private def toResponse(m: MessageRow): MessageResponse =
     MessageResponse(
       id = m.id,
@@ -187,15 +190,19 @@ class ConversationService(
       products = m.products.getOrElse(Seq.empty)
     )
 
+  // 503 when a Supabase write fails mid-turn.
   private def dbError: ValidationFailure =
     ValidationFailure(503, "Something went wrong, please try again.", Some("UPSTREAM_UNAVAILABLE"))
 
+  // 404 when the chat session id is unknown.
   private def sessionNotFound: ValidationFailure =
     ValidationFailure(404, "Session not found", Some("SESSION_NOT_FOUND"))
 
+  // 404 when the conversation id is unknown.
   private def notFound: ValidationFailure =
     ValidationFailure(404, "Conversation not found", Some("NOT_FOUND"))
 
+  // 403 when the conversation/session belongs to someone else.
   private def forbidden: ValidationFailure =
     ValidationFailure(403, "Forbidden", Some("FORBIDDEN"))
 }

@@ -35,6 +35,7 @@ class GeminiLLMClient(
   /** Last call time per model, so primary and fallback are throttled independently. */
   private val lastCallAtByModel = scala.collection.mutable.Map.empty[String, Long]
 
+  // True for 429 / RESOURCE_EXHAUSTED so generate can retry on the fallback model.
   private def isQuotaError(e: ApiException): Boolean =
     e.code() == 429 || e.status() == "RESOURCE_EXHAUSTED"
 
@@ -55,6 +56,7 @@ class GeminiLLMClient(
     lastCallAtByModel(model) = System.currentTimeMillis()
   }
 
+  // Rate-limits then calls generateContent on the given Gemini/Gemma model.
   private def callModel(model: String, prompt: String) = {
     throttle(model)
     client.models.generateContent(model, prompt, null)
@@ -86,6 +88,7 @@ object GeminiLLMClient {
 
   private val DefaultPrompt = "What is the capital of France?"
 
+  // Reads GEMMA_API_KEY or GOOGLE_API_KEY for the manual smoke-test main.
   private def apiKeyFromEnv(): String =
     sys.env
       .get("GEMMA_API_KEY")

@@ -149,6 +149,7 @@ object AssistantPrompt {
 
   private val CallTimeout = 15.seconds
 
+  // Assembles the Call #2 system prompt with current filters, history, and any pending offer.
   private def buildPrompt(
       latestMessage: String,
       currentFilters: Option[ExtractedFilters],

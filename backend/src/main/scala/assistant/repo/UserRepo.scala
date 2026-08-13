@@ -20,6 +20,7 @@ class UserRepo(client: SupabaseRestClient) {
     */
   private def normalizeEmail(email: String): String = email.trim.toLowerCase
 
+  /** Looks up a user by normalized email; empty if none is registered. */
   def findByEmail(email: String): Option[User] = {
     val json = client.get(Table, Map("email" -> s"eq.${normalizeEmail(email)}"))
     read[Seq[User]](json).headOption

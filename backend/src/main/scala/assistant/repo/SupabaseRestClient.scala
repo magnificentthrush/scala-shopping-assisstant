@@ -26,6 +26,7 @@ class SupabaseRestClient(config: AppConfig) {
   private val backend = HttpClientSyncBackend()
   private val baseUrl = s"${config.supabaseUrl}/rest/v1"
 
+  // API key + bearer token required on every PostgREST request.
   private def authHeaders: Map[String, String] = Map(
     "apikey" -> config.supabaseKey,
     "Authorization" -> s"Bearer ${config.supabaseKey}"
@@ -102,6 +103,7 @@ class SupabaseRestClient(config: AppConfig) {
     bodyOrThrow(response, s"RPC $name")
   }
 
+  // Unwraps a 2xx body, or throws with the HTTP status and error payload.
   private def bodyOrThrow(response: Response[Either[String, String]], context: String): String =
     response.body match {
       case Right(body) => body

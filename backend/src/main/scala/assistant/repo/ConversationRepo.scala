@@ -26,6 +26,7 @@ class ConversationRepo(client: SupabaseRestClient) {
     )
   }
 
+  /** Returns the conversation row, or None if the id is missing or not a UUID. */
   def findById(conversationId: String): Option[Conversation] = {
     if (!isValidUuid(conversationId)) None
     else {
@@ -34,6 +35,7 @@ class ConversationRepo(client: SupabaseRestClient) {
     }
   }
 
+  // Rejects non-UUID ids so PostgREST doesn't 400 on a malformed filter.
   private def isValidUuid(s: String): Boolean =
     scala.util.Try(java.util.UUID.fromString(s)).isSuccess
 

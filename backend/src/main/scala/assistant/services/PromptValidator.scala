@@ -49,6 +49,7 @@ object PromptValidator {
       |""".stripMargin
 
   private val CallTimeout = 15.seconds
+  // Prepends the classifier system prompt to the raw user message.
   private def buildPrompt(message: String): String = SystemPrompt + message
 
   /** Validates a single message. Never throws — any failure fails closed. */

@@ -7,6 +7,7 @@ import upickle.default._
 import upickle.implicits.key
 
 trait ProductProvider {
+  /** Runs the retrieval ladder against Supabase and returns matching products. */
   def search(filters: ExtractedFilters, limit: Int = 30): Seq[Product]
 }
 
@@ -31,6 +32,7 @@ class SupabaseProductProvider(client: SupabaseRestClient) extends ProductProvide
       .mkString(" ")
     val priceParam = filters.budget.map(b => s"lte.$b").getOrElse("gt.0")
 
+    // Shared PostgREST filters (in-stock, price, limit) plus any extra rung filters.
     def baseParams(extra: Map[String, String]): Map[String, String] =
       Map(
         "category" -> "not.is.null",
@@ -38,6 +40,7 @@ class SupabaseProductProvider(client: SupabaseRestClient) extends ProductProvide
         "limit" -> limit.toString
       ) ++ extra
 
+    // Fetches product rows for one retrieval rung and maps them to domain Products.
     def run(params: Map[String, String]): Seq[Product] =
       read[Seq[ProductRow]](client.get(Table, params)).map(_.toProduct)
 
@@ -120,8 +123,10 @@ class SupabaseProductProvider(client: SupabaseRestClient) extends ProductProvide
       .map(_.trim.toLowerCase)
       .filter(_.nonEmpty)
       .distinct
+    // User-visible fields only — spec-only FTS hits must not count as keyword matches.
     def visibleText(p: Product): String =
       (Seq(p.name, p.category) ++ p.brand.toSeq ++ p.description.toSeq).mkString(" ").toLowerCase
+    // How many extracted query terms appear in the product's visible text.
     def termHits(p: Product): Int = terms.count(t => TextMatch.containsTerm(visibleText(p), t))
     val minHits = if (terms.size >= 2) 2 else 1
     val rung3 =
@@ -153,6 +158,7 @@ private case class ProductRow(
     @key("product_url") productUrl: Option[String],
     @key("product_specifications") productSpecifications: Option[String]
 ) {
+  /** Maps a PostgREST product row onto the domain Product, filling missing price/category. */
   def toProduct: Product = Product(
     id = id,
     name = name,

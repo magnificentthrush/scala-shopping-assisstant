@@ -34,6 +34,7 @@ class AssistantService(
     conversations: ConversationRepo
 ) {
 
+  /** Runs Call #2, optional catalog search, and commits the assistant turn. */
   def respond(conversationId: String, latestMessage: String): Either[ValidationFailure, AssistantTurnResult] = {
     val (currentFilters, pendingOffer) = conversationStates.find(conversationId) match {
       case Some(state) => readStateEnvelope(state.filters)
@@ -86,6 +87,7 @@ class AssistantService(
     }
   }
 
+  // Handles pending-offer replies, search + rerank + Call #3, then commits the turn.
   private def persistAndSearch(
       conversationId: String,
       llmResult: AssistantLLMResult,
@@ -380,19 +382,23 @@ class AssistantService(
     }
   }
 
+  // Fills a sidebar title from filters only when the conversation is still untitled.
   private def setConversationTitleIfUntitled(conversationId: String, filters: ExtractedFilters): Unit =
     deriveTitle(filters).foreach { title =>
       conversations.setTitleIfNull(conversationId, title)
     }
 
+  // Category, budget, and first keyword — the bits shown in the appended filter summary.
   private def filterSummaryParts(filters: ExtractedFilters): Seq[String] =
     filters.category.toSeq ++
       filters.budget.map(b => s"under ₹${formatInr(b)}") ++
       filters.keywords.headOption.map(k => s""""$k"""").toSeq
 
+  // Comma-joined filter summary used when describing a pending no-match offer.
   private def filterSummary(filters: ExtractedFilters): String =
     filterSummaryParts(filters).mkString(", ")
 
+  // Formats a rupee amount with Indian grouping (e.g. 9960 → "9,960").
   private def formatInr(amount: BigDecimal): String = {
     val fmt = java.text.NumberFormat.getNumberInstance(new java.util.Locale("en", "IN"))
     fmt.setMaximumFractionDigits(0)

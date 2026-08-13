@@ -27,6 +27,7 @@ class MessageValidationService(client: LLMClient) {
     "I can't help with that request. Please ask about shopping or products."
   private val RejectionCode = Some("REJECTED") //user in rejection in the bottom
 
+  /** Runs the Call #1 pipeline (blank, regex, LLM) and never throws. */
   def validate(
       message: String
   ): Either[ValidationFailure, Unit] =
@@ -35,6 +36,7 @@ class MessageValidationService(client: LLMClient) {
       case Failure(_)      => Left(rejected)
     }
 
+  // The actual pipeline; callers wrap this so unexpected exceptions fail closed.
   private def validateUnsafe(
       message: String
   ): Either[ValidationFailure, Unit] = {
@@ -49,6 +51,7 @@ class MessageValidationService(client: LLMClient) {
     }
   }
 
+  // Shared 422 REJECTED payload for regex hits and unsafe LLM classifications.
   private def rejected: ValidationFailure =
     ValidationFailure(status = 422, error = RejectionError, code = RejectionCode)
 }

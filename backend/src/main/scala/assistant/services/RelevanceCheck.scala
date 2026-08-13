@@ -60,9 +60,11 @@ object RelevanceCheck {
   /** Keep candidate text compact to bound prompt tokens. */
   private val TruncateAt = 200
 
+  // Caps a candidate field so Call #3's prompt stays within token budget.
   private def truncate(s: String): String =
     if (s.length <= TruncateAt) s else s.substring(0, TruncateAt) + "..."
 
+  // Assembles the Call #3 judge prompt with filters, the user message, and candidate list.
   private def buildPrompt(
       latestMessage: String,
       filters: Option[ExtractedFilters],
